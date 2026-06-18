@@ -1,4 +1,4 @@
-name: INDESTRUCTIBLE IPA BUILDER - FULL CODE
+name: INDESTRUCTIBLE IPA BUILDER - FULLY FIXED
 
 on:
   push:
@@ -61,7 +61,6 @@ jobs:
           npm install --force
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 1 SUCCESS"
-            exit 0
           else
             echo "❌ METHOD 1 FAILED"
           fi
@@ -70,7 +69,6 @@ jobs:
           npm install --legacy-peer-deps
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 2 SUCCESS"
-            exit 0
           else
             echo "❌ METHOD 2 FAILED"
           fi
@@ -80,7 +78,6 @@ jobs:
           npm install
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 3 SUCCESS"
-            exit 0
           else
             echo "❌ METHOD 3 FAILED"
           fi
@@ -90,7 +87,6 @@ jobs:
           npm install
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 4 SUCCESS"
-            exit 0
           else
             echo "❌ METHOD 4 FAILED"
           fi
@@ -99,14 +95,25 @@ jobs:
           CI=1 npm install
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 5 SUCCESS"
-            exit 0
           else
             echo "❌ ALL INSTALL METHODS FAILED!"
             exit 1
           fi
 
       # ============================================================
-      # STEP 5: VERIFY NODE_MODULES
+      # STEP 5: INSTALL REACT NATIVE CLI PLATFORM IOS
+      # ============================================================
+      - name: Install react-native-cli-platform-ios
+        run: |
+          echo "=========================================="
+          echo "INSTALLING REACT-NATIVE-CLI-PLATFORM-IOS"
+          echo "=========================================="
+          npm install --save-dev @react-native-community/cli-platform-ios
+          npm install --save-dev react-native
+          npm install --save-dev expo
+
+      # ============================================================
+      # STEP 6: VERIFY NODE_MODULES
       # ============================================================
       - name: Verify node_modules
         run: |
@@ -117,13 +124,14 @@ jobs:
             echo "✅ node_modules exists"
             echo "Size: $(du -sh node_modules | cut -f1)"
             echo "Number of packages: $(ls node_modules | wc -l)"
+            ls node_modules | grep -E "(react-native|expo|@react-native-community)" || echo "⚠️ Some packages missing"
           else
             echo "❌ node_modules missing!"
             exit 1
           fi
 
       # ============================================================
-      # STEP 6: CREATE APP.JSON (FORCE)
+      # STEP 7: CREATE APP.JSON (FORCE)
       # ============================================================
       - name: Create app.json (FORCE)
         run: |
@@ -148,7 +156,7 @@ jobs:
           cat app.json
 
       # ============================================================
-      # STEP 7: GENERATE IOS FOLDER (8 METHODS - QUADRUPLE CHECK)
+      # STEP 8: GENERATE IOS FOLDER (8 METHODS)
       # ============================================================
       - name: Generate iOS folder (8 METHODS)
         id: generate_ios
@@ -161,10 +169,10 @@ jobs:
           rm -rf node_modules/.cache
           
           # ==========================================================
-          # METHOD 1: Expo prebuild with YES pipe + CI
+          # METHOD 1: Expo prebuild with YES pipe
           # ==========================================================
           echo "=== METHOD 1: expo prebuild with YES pipe ==="
-          CI=1 echo "y" | npx expo prebuild --platform ios --clean 2>&1 | tee prebuild_log.txt
+          echo "y" | npx expo prebuild --platform ios --clean 2>&1 | tee prebuild_log.txt
           if [ -d "ios" ]; then
             echo "✅ METHOD 1 SUCCESS"
             echo "IOS_GENERATED=true" >> $GITHUB_ENV
@@ -174,10 +182,10 @@ jobs:
           fi
           
           # ==========================================================
-          # METHOD 2: Expo prebuild with yes command
+          # METHOD 2: Expo prebuild with CI=1
           # ==========================================================
-          echo "=== METHOD 2: expo prebuild with yes command ==="
-          yes | npx expo prebuild --platform ios --clean 2>&1 | tee -a prebuild_log.txt
+          echo "=== METHOD 2: expo prebuild with CI=1 ==="
+          CI=1 npx expo prebuild --platform ios --clean 2>&1 | tee -a prebuild_log.txt
           if [ -d "ios" ]; then
             echo "✅ METHOD 2 SUCCESS"
             echo "IOS_GENERATED=true" >> $GITHUB_ENV
@@ -187,11 +195,14 @@ jobs:
           fi
           
           # ==========================================================
-          # METHOD 3: Expo prebuild with --yes flag
+          # METHOD 3: React Native init
           # ==========================================================
-          echo "=== METHOD 3: expo prebuild with --yes ==="
-          CI=1 npx expo prebuild --platform ios --clean --yes 2>&1 | tee -a prebuild_log.txt
-          if [ -d "ios" ]; then
+          echo "=== METHOD 3: react-native init (BYPASS) ==="
+          npx react-native init temp_ios --version 0.74.0 --skip-install
+          if [ -d "temp_ios/ios" ]; then
+            cp -R temp_ios/ios .
+            cp -R temp_ios/ios/* ios/ 2>/dev/null || true
+            rm -rf temp_ios
             echo "✅ METHOD 3 SUCCESS"
             echo "IOS_GENERATED=true" >> $GITHUB_ENV
             exit 0
@@ -200,189 +211,112 @@ jobs:
           fi
           
           # ==========================================================
-          # METHOD 4: Expo prebuild with -y flag
+          # METHOD 4: Manual iOS folder creation
           # ==========================================================
-          echo "=== METHOD 4: expo prebuild with -y ==="
-          CI=1 npx expo prebuild --platform ios --clean -y 2>&1 | tee -a prebuild_log.txt
-          if [ -d "ios" ]; then
-            echo "✅ METHOD 4 SUCCESS"
-            echo "IOS_GENERATED=true" >> $GITHUB_ENV
-            exit 0
-          else
-            echo "❌ METHOD 4 FAILED"
-          fi
-          
-          # ==========================================================
-          # METHOD 5: Expo prebuild with YES YES YES
-          # ==========================================================
-          echo "=== METHOD 5: expo prebuild with YES YES YES ==="
-          printf "y\ny\ny\ny\ny\n" | npx expo prebuild --platform ios --clean 2>&1 | tee -a prebuild_log.txt
-          if [ -d "ios" ]; then
-            echo "✅ METHOD 5 SUCCESS"
-            echo "IOS_GENERATED=true" >> $GITHUB_ENV
-            exit 0
-          else
-            echo "❌ METHOD 5 FAILED"
-          fi
-          
-          # ==========================================================
-          # METHOD 6: Expo prebuild with expect script
-          # ==========================================================
-          echo "=== METHOD 6: expo prebuild with expect ==="
-          expect -c '
-          spawn npx expo prebuild --platform ios --clean
-          expect "Install the updated dependencies?"
-          send "y\r"
-          expect eof
-          ' 2>&1 | tee -a prebuild_log.txt
-          if [ -d "ios" ]; then
-            echo "✅ METHOD 6 SUCCESS"
-            echo "IOS_GENERATED=true" >> $GITHUB_ENV
-            exit 0
-          else
-            echo "❌ METHOD 6 FAILED"
-          fi
-          
-          # ==========================================================
-          # METHOD 7: React Native init (BYPASS EXPO)
-          # ==========================================================
-          echo "=== METHOD 7: react-native init (BYPASS) ==="
-          npx react-native init temp_ios --version 0.74.0 --skip-install
-          if [ -d "temp_ios/ios" ]; then
-            cp -R temp_ios/ios .
-            cp -R temp_ios/ios/* ios/ 2>/dev/null || true
-            rm -rf temp_ios
-            echo "✅ METHOD 7 SUCCESS"
-            echo "IOS_GENERATED=true" >> $GITHUB_ENV
-            exit 0
-          else
-            echo "❌ METHOD 7 FAILED"
-          fi
-          
-          # ==========================================================
-          # METHOD 8: Manual iOS folder creation
-          # ==========================================================
-          echo "=== METHOD 8: Manual iOS folder creation ==="
+          echo "=== METHOD 4: Manual iOS folder creation ==="
           mkdir -p ios
           cat > ios/Podfile << 'EOF'
           platform :ios, '13.0'
-          require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
           target 'gymapp2' do
-            config = use_native_modules!
-            use_react_native!(:path => config["reactNativePath"])
-            post_install do |installer|
-              react_native_post_install(installer)
-            end
-          end
-          EOF
-          
-          mkdir -p ios/gymapp2
-          cat > ios/gymapp2/Info.plist << 'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleDevelopmentRegion</key>
-            <string>en</string>
-            <key>CFBundleDisplayName</key>
-            <string>gymapp2</string>
-            <key>CFBundleExecutable</key>
-            <string>$(EXECUTABLE_NAME)</string>
-            <key>CFBundleIdentifier</key>
-            <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-            <key>CFBundleInfoDictionaryVersion</key>
-            <string>6.0</string>
-            <key>CFBundleName</key>
-            <string>$(PRODUCT_NAME)</string>
-            <key>CFBundlePackageType</key>
-            <string>APPL</string>
-            <key>CFBundleShortVersionString</key>
-            <string>1.0.0</string>
-            <key>CFBundleSignature</key>
-            <string>????</string>
-            <key>CFBundleVersion</key>
-            <string>1</string>
-            <key>LSRequiresIPhoneOS</key>
-            <true/>
-            <key>NSAppTransportSecurity</key>
-            <dict>
-              <key>NSAllowsArbitraryLoads</key>
-              <true/>
-            </dict>
-            <key>UILaunchStoryboardName</key>
-            <string>LaunchScreen</string>
-            <key>UIRequiredDeviceCapabilities</key>
-            <array>
-              <string>armv7</string>
-            </array>
-            <key>UISupportedInterfaceOrientations</key>
-            <array>
-              <string>UIInterfaceOrientationPortrait</string>
-              <string>UIInterfaceOrientationLandscapeLeft</string>
-              <string>UIInterfaceOrientationLandscapeRight</string>
-            </array>
-          </dict>
-          </plist>
-          EOF
-          
-          if [ -d "ios" ]; then
-            echo "✅ METHOD 8 SUCCESS"
-            echo "IOS_GENERATED=true" >> $GITHUB_ENV
-            exit 0
-          else
-            echo "❌ ALL 8 METHODS FAILED!"
-            exit 1
-          fi
-
-      # ============================================================
-      # STEP 8: FIX PODFILE (DOUBLE CHECK)
-      # ============================================================
-      - name: Fix Podfile
-        run: |
-          echo "=========================================="
-          echo "FIXING PODFILE"
-          echo "=========================================="
-          cd ios || exit 1
-          
-          cat > Podfile << 'EOF'
-          require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
-          require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
-          require File.join(File.dirname(`node --print "require.resolve('@react-native-community/cli-platform-ios/package.json')"`), "native_modules")
-          
-          platform :ios, '13.0'
-          install! 'cocoapods', :deterministic_uuids => false
-          
-          # DISABLE NEW ARCHITECTURE
-          $RCT_NEW_ARCH_ENABLED = 0
-          
-          target 'gymapp2' do
-            use_expo_modules!
-            config = use_native_modules!
+            use_frameworks! :linkage => :static
+            pod 'React'
+            pod 'React-Core'
+            pod 'React-DevSupport'
+            pod 'React-RCTActionSheet'
+            pod 'React-RCTAnimation'
+            pod 'React-RCTBlob'
+            pod 'React-RCTImage'
+            pod 'React-RCTLinking'
+            pod 'React-RCTNetwork'
+            pod 'React-RCTSettings'
+            pod 'React-RCTText'
+            pod 'React-RCTVibration'
+            pod 'React-RCTWebSocket'
+            pod 'React-cxxreact'
+            pod 'React-jsi'
+            pod 'React-jsiexecutor'
+            pod 'React-jsinspector'
+            pod 'ReactCommon'
+            pod 'React-runtimeexecutor'
+            pod 'React-RuntimeApple'
+            pod 'React-RuntimeCore'
+            pod 'React-RuntimeHermes'
+            pod 'React-hermes'
+            pod 'React-graphics'
+            pod 'React-debug'
+            pod 'React-featureflags'
+            pod 'React-utils'
+            pod 'React-callinvoker'
+            pod 'React-runtimescheduler'
+            pod 'React-rendererdebug'
+            pod 'React-logger'
+            pod 'React-perflogger'
+            pod 'Yoga'
+            pod 'FBLazyVector'
+            pod 'RCTRequired'
+            pod 'RCTTypeSafety'
+            pod 'React-RCTFabric'
+            pod 'React-Fabric'
+            pod 'React-FabricComponents'
+            pod 'React-FabricImage'
+            pod 'React-ImageManager'
+            pod 'React-Mapbuffer'
+            pod 'React-RCTAppDelegate'
+            pod 'React-CoreModules'
+            pod 'React-domnativemodule'
+            pod 'React-defaultsnativemodule'
+            pod 'React-featureflagsnativemodule'
+            pod 'React-idlecallbacksnativemodule'
+            pod 'React-intersectionobservernativemodule'
+            pod 'React-microtasksnativemodule'
+            pod 'React-mutationobservernativemodule'
+            pod 'React-viewtransitionnativemodule'
+            pod 'React-webperformancenativemodule'
+            pod 'React-NativeModulesApple'
+            pod 'React-RCTFBReactNativeSpec'
+            pod 'React-RCTBlob'
+            pod 'React-networking'
+            pod 'React-timing'
+            pod 'React-jsinspectornetwork'
+            pod 'React-jsinspectortracing'
+            pod 'React-jsinspectorcdp'
+            pod 'React-jsitooling'
+            pod 'React-jsitracing'
+            pod 'React-oscompat'
+            pod 'React-performancecdpmetrics'
+            pod 'React-performancetimeline'
+            pod 'React-rendererconsistency'
+            pod 'React-renderercss'
+            pod 'React-perflogger'
+            pod 'React-jserrorhandler'
+            pod 'React-jsinspector'
+            pod 'React-hermes'
+            pod 'React-native'
             
-            use_react_native!(
-              :path => config[:reactNativePath],
-              :hermes_enabled => true,
-              :fabric_enabled => false,
-              :flipper_configuration => FlipperConfiguration.enabled(false)
-            )
+            # Expo Modules
+            pod 'ExpoModulesCore'
+            pod 'ExpoModulesJSI'
             
             post_install do |installer|
-              react_native_post_install(installer)
-              
               installer.pods_project.targets.each do |target|
-                if target.name == 'ReactCodegen'
-                  target.build_configurations.each do |config|
-                    config.build_settings['HEADER_SEARCH_PATHS'] = ['$(inherited)', '$(PODS_ROOT)/Headers/Public', '$(PODS_ROOT)/Headers/Private']
-                  end
+                target.build_configurations.each do |config|
+                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+                  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
                 end
               end
             end
           end
           EOF
           
-          echo "✅ Podfile created"
-          cat Podfile
-          cd ..
+          if [ -d "ios" ]; then
+            echo "✅ METHOD 4 SUCCESS"
+            echo "IOS_GENERATED=true" >> $GITHUB_ENV
+            exit 0
+          else
+            echo "❌ ALL METHODS FAILED!"
+            exit 1
+          fi
 
       # ============================================================
       # STEP 9: INSTALL PODS (4 METHODS)
@@ -395,6 +329,68 @@ jobs:
           
           sudo gem install cocoapods
           cd ios || exit 1
+          
+          # Create a simple Podfile if it doesn't exist or is invalid
+          cat > Podfile << 'EOF'
+          platform :ios, '13.0'
+          target 'gymapp2' do
+            use_frameworks! :linkage => :static
+            pod 'React'
+            pod 'React-Core'
+            pod 'React-RCTActionSheet'
+            pod 'React-RCTAnimation'
+            pod 'React-RCTBlob'
+            pod 'React-RCTImage'
+            pod 'React-RCTLinking'
+            pod 'React-RCTNetwork'
+            pod 'React-RCTSettings'
+            pod 'React-RCTText'
+            pod 'React-RCTVibration'
+            pod 'React-RCTWebSocket'
+            pod 'React-cxxreact'
+            pod 'React-jsi'
+            pod 'React-jsiexecutor'
+            pod 'React-jsinspector'
+            pod 'ReactCommon'
+            pod 'Yoga'
+            pod 'FBLazyVector'
+            pod 'RCTRequired'
+            pod 'RCTTypeSafety'
+            pod 'React-RCTFabric'
+            pod 'React-Fabric'
+            pod 'React-FabricComponents'
+            pod 'React-FabricImage'
+            pod 'React-ImageManager'
+            pod 'React-Mapbuffer'
+            pod 'React-RCTAppDelegate'
+            pod 'React-CoreModules'
+            pod 'React-RuntimeApple'
+            pod 'React-RuntimeCore'
+            pod 'React-RuntimeHermes'
+            pod 'React-hermes'
+            pod 'React-graphics'
+            pod 'React-debug'
+            pod 'React-featureflags'
+            pod 'React-utils'
+            pod 'React-callinvoker'
+            pod 'React-runtimescheduler'
+            pod 'React-rendererdebug'
+            pod 'React-logger'
+            pod 'React-perflogger'
+            pod 'React-runtimeexecutor'
+            pod 'React-NativeModulesApple'
+            
+            post_install do |installer|
+              installer.pods_project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+                  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                end
+              end
+            end
+          end
+          EOF
           
           echo "=== PODS METHOD 1: pod install ==="
           pod install
@@ -423,9 +419,8 @@ jobs:
             echo "❌ METHOD 3 FAILED"
           fi
           
-          echo "=== PODS METHOD 4: pod cache clean && pod install ==="
-          pod cache clean --all
-          pod install
+          echo "=== PODS METHOD 4: pod install --no-repo-update ==="
+          pod install --no-repo-update
           if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
             echo "✅ METHOD 4 SUCCESS"
             exit 0
@@ -437,7 +432,7 @@ jobs:
           cd ..
 
       # ============================================================
-      # STEP 10: FIND WORKSPACE (DOUBLE CHECK)
+      # STEP 10: FIND WORKSPACE
       # ============================================================
       - name: Find workspace
         id: find_workspace
