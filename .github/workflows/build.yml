@@ -34,19 +34,19 @@ jobs:
       - name: Fix app.json
         run: |
           cat > app.json << 'EOF'
-        {
-          "expo": {
-            "name": "gymapp2",
-            "slug": "gymapp2",
-            "version": "1.0.0",
-            "platforms": ["ios", "web"],
-            "ios": {
-              "bundleIdentifier": "com.yourcompany.gymapp2",
-              "supportsTablet": true
+          {
+            "expo": {
+              "name": "gymapp2",
+              "slug": "gymapp2",
+              "version": "1.0.0",
+              "platforms": ["ios", "web"],
+              "ios": {
+                "bundleIdentifier": "com.yourcompany.gymapp2",
+                "supportsTablet": true
+              }
             }
           }
-        }
-        EOF
+          EOF
           cat app.json
 
       # ============================================
@@ -76,52 +76,48 @@ jobs:
           fi
 
       # ============================================
-      # FIX EXPO MODULES JSI ERROR
+      # FIX EXPO MODULES JSI ERROR - CREATE PODFILE
       # ============================================
-      - name: Fix ExpoModulesJSI error
+      - name: Create fixed Podfile
         run: |
           cd ios || exit 1
           
-          # Remove problematic Pods
           rm -rf Pods
           rm -f Podfile.lock
           
-          # Create a fixed Podfile
-          cat > Podfile << 'EOF'
-        require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
-        require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
-        require File.join(File.dirname(`node --print "require.resolve('@react-native-community/cli-platform-ios/package.json')"`), "native_modules")
-        
-        platform :ios, '13.0'
-        install! 'cocoapods', :deterministic_uuids => false
-        
-        target 'gymapp2' do
-          use_expo_modules!
-          config = use_native_modules!
+          # Write Podfile using echo commands instead of heredoc
+          echo 'require File.join(File.dirname(`node --print "require.resolve('\''expo/package.json'\'')"`), "scripts/autolinking")' > Podfile
+          echo 'require File.join(File.dirname(`node --print "require.resolve('\''react-native/package.json'\'')"`), "scripts/react_native_pods")' >> Podfile
+          echo 'require File.join(File.dirname(`node --print "require.resolve('\''@react-native-community/cli-platform-ios/package.json'\'')"`), "native_modules")' >> Podfile
+          echo '' >> Podfile
+          echo "platform :ios, '13.0'" >> Podfile
+          echo "install! 'cocoapods', :deterministic_uuids => false" >> Podfile
+          echo '' >> Podfile
+          echo "target 'gymapp2' do" >> Podfile
+          echo "  use_expo_modules!" >> Podfile
+          echo "  config = use_native_modules!" >> Podfile
+          echo '' >> Podfile
+          echo "  use_react_native!(" >> Podfile
+          echo "    :path => config[:reactNativePath]," >> Podfile
+          echo "    :hermes_enabled => true," >> Podfile
+          echo "    :fabric_enabled => false," >> Podfile
+          echo "    :flipper_configuration => FlipperConfiguration.enabled(false)" >> Podfile
+          echo "  )" >> Podfile
+          echo '' >> Podfile
+          echo "  post_install do |installer|" >> Podfile
+          echo "    react_native_post_install(installer)" >> Podfile
+          echo '    installer.pods_project.targets.each do |target|' >> Podfile
+          echo "      if target.name == 'ExpoModulesJSI'" >> Podfile
+          echo "        target.build_configurations.each do |config|" >> Podfile
+          echo "          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']" >> Podfile
+          echo "          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'EXPO_MODULES_JSI_FIX=1'" >> Podfile
+          echo "        end" >> Podfile
+          echo "      end" >> Podfile
+          echo "    end" >> Podfile
+          echo "  end" >> Podfile
+          echo "end" >> Podfile
           
-          use_react_native!(
-            :path => config[:reactNativePath],
-            :hermes_enabled => true,
-            :fabric_enabled => false,
-            :flipper_configuration => FlipperConfiguration.enabled(false)
-          )
-          
-          post_install do |installer|
-            react_native_post_install(installer)
-            
-            # Fix for ExpoModulesJSI
-            installer.pods_project.targets.each do |target|
-              if target.name == 'ExpoModulesJSI'
-                target.build_configurations.each do |config|
-                  config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
-                  config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'EXPO_MODULES_JSI_FIX=1'
-                end
-              end
-            end
-          end
-        end
-        EOF
-          
+          cat Podfile
           cd ..
 
       # ============================================
@@ -147,7 +143,6 @@ jobs:
             SCHEME=$(basename "$WORKSPACE" .xcworkspace)
             echo "Building workspace: $WORKSPACE with scheme: $SCHEME"
             
-            # Build with specific flags to avoid ExpoModulesJSI error
             xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO GCC_PREPROCESSOR_DEFINITIONS='$(inherited) EXPO_MODULES_JSI_FIX=1'
           else
             echo "No workspace found!"
@@ -204,5 +199,5 @@ jobs:
           cat app.json 2>/dev/null || echo "No app.json"
           echo "=== iOS folder ==="
           ls -la ios/ 2>/dev/null || echo "No ios folder"
-          echo "=== Pods error log ==="
-          cat ios/Pods/Pods.xcodeproj/project.pbxproj 2>/dev/null | head -50
+          echo "=== Podfile ==="
+          cat ios/Podfile 2>/dev/null || echo "No Podfile"
