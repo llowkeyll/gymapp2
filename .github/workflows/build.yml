@@ -1,4 +1,4 @@
-name: BUILD IPA - NO QUESTIONS ASKED
+name: BUILD IPA - EXPO FIX
 
 on:
   push:
@@ -29,50 +29,28 @@ jobs:
           cache: 'npm'
 
       # ============================================
-      # FIX APP.JSON - ADD IOS PLATFORM
+      # FIX APP.JSON
       # ============================================
-      - name: Fix app.json to include iOS
+      - name: Fix app.json
         run: |
-          if [ -f "app.json" ]; then
-            echo "Fixing app.json..."
-            # Create a new app.json with proper iOS config
-            cat > app.json << 'EOF'
-          {
-            "expo": {
-              "name": "gymapp2",
-              "slug": "gymapp2",
-              "version": "1.0.0",
-              "platforms": ["ios", "web"],
-              "ios": {
-                "bundleIdentifier": "com.yourcompany.gymapp2",
-                "supportsTablet": true
-              }
+          cat > app.json << 'EOF'
+        {
+          "expo": {
+            "name": "gymapp2",
+            "slug": "gymapp2",
+            "version": "1.0.0",
+            "platforms": ["ios", "web"],
+            "ios": {
+              "bundleIdentifier": "com.yourcompany.gymapp2",
+              "supportsTablet": true
             }
           }
-          EOF
-          else
-            echo "Creating app.json..."
-            cat > app.json << 'EOF'
-          {
-            "expo": {
-              "name": "gymapp2",
-              "slug": "gymapp2",
-              "version": "1.0.0",
-              "platforms": ["ios", "web"],
-              "ios": {
-                "bundleIdentifier": "com.yourcompany.gymapp2",
-                "supportsTablet": true
-              }
-            }
-          }
-          EOF
-          fi
-          
-          echo "app.json contents:"
+        }
+        EOF
           cat app.json
 
       # ============================================
-      # INSTALL DEPENDENCIES - FORCE MODE
+      # INSTALL DEPENDENCIES
       # ============================================
       - name: Install dependencies
         run: |
@@ -80,7 +58,7 @@ jobs:
           npm install --force
 
       # ============================================
-      # GENERATE IOS FOLDER - WITH YES TO ALL PROMPTS
+      # GENERATE IOS FOLDER
       # ============================================
       - name: Generate iOS folder
         run: |
@@ -90,78 +68,89 @@ jobs:
           rm -rf ios
           rm -rf node_modules/.cache
           
-          echo "y" | npx expo prebuild --platform ios --clean || echo "Prebuild failed, continuing..."
+          echo "y" | npx expo prebuild --platform ios --clean || echo "Prebuild failed"
           
           if [ ! -d "ios" ]; then
-            echo "Expo prebuild failed, using React Native init..."
-            npx react-native init temp_ios --version 0.85.3 --skip-install
-            cp -R temp_ios/ios ./
-            cp -R temp_ios/ios/* ios/ 2>/dev/null || true
-            rm -rf temp_ios
-          fi
-          
-          if [ ! -d "ios" ]; then
-            echo "Creating manual iOS folder..."
+            echo "Creating iOS folder manually..."
             mkdir -p ios
-            cat > ios/Podfile << 'EOF'
-          platform :ios, '13.0'
-          require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+          fi
+
+      # ============================================
+      # FIX EXPO MODULES JSI ERROR
+      # ============================================
+      - name: Fix ExpoModulesJSI error
+        run: |
+          cd ios || exit 1
           
-          target 'gymapp2' do
-            config = use_native_modules!
-            use_react_native!(:path => config["reactNativePath"])
+          # Remove problematic Pods
+          rm -rf Pods
+          rm -f Podfile.lock
+          
+          # Create a fixed Podfile
+          cat > Podfile << 'EOF'
+        require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
+        require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
+        require File.join(File.dirname(`node --print "require.resolve('@react-native-community/cli-platform-ios/package.json')"`), "native_modules")
+        
+        platform :ios, '13.0'
+        install! 'cocoapods', :deterministic_uuids => false
+        
+        target 'gymapp2' do
+          use_expo_modules!
+          config = use_native_modules!
+          
+          use_react_native!(
+            :path => config[:reactNativePath],
+            :hermes_enabled => true,
+            :fabric_enabled => false,
+            :flipper_configuration => FlipperConfiguration.enabled(false)
+          )
+          
+          post_install do |installer|
+            react_native_post_install(installer)
             
-            post_install do |installer|
-              react_native_post_install(installer)
+            # Fix for ExpoModulesJSI
+            installer.pods_project.targets.each do |target|
+              if target.name == 'ExpoModulesJSI'
+                target.build_configurations.each do |config|
+                  config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']
+                  config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'EXPO_MODULES_JSI_FIX=1'
+                end
+              end
             end
           end
-          EOF
-          fi
+        end
+        EOF
+          
+          cd ..
 
       # ============================================
-      # VERIFY IOS FOLDER
-      # ============================================
-      - name: Verify iOS folder
-        run: |
-          if [ -d "ios" ]; then
-            echo "iOS folder exists!"
-            ls -la ios/
-          else
-            echo "iOS folder missing!"
-            exit 1
-          fi
-
-      # ============================================
-      # INSTALL PODS
+      # INSTALL PODS WITH FIX
       # ============================================
       - name: Install Pods
         run: |
           sudo gem install cocoapods
           cd ios || exit 1
-          rm -f Podfile.lock
           pod install --repo-update || pod install --verbose
           cd ..
 
       # ============================================
-      # FIND WORKSPACE AND BUILD
+      # BUILD IOS APP
       # ============================================
       - name: Build iOS app
         run: |
           cd ios || exit 1
           
           WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -type d | head -1)
-          PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -type d | head -1)
           
           if [ -n "$WORKSPACE" ]; then
             SCHEME=$(basename "$WORKSPACE" .xcworkspace)
-            echo "Building workspace: $WORKSPACE"
-            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
-          elif [ -n "$PROJECT" ]; then
-            SCHEME=$(basename "$PROJECT" .xcodeproj)
-            echo "Building project: $PROJECT"
-            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+            echo "Building workspace: $WORKSPACE with scheme: $SCHEME"
+            
+            # Build with specific flags to avoid ExpoModulesJSI error
+            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO GCC_PREPROCESSOR_DEFINITIONS='$(inherited) EXPO_MODULES_JSI_FIX=1'
           else
-            echo "No iOS project found!"
+            echo "No workspace found!"
             ls -la
             exit 1
           fi
@@ -169,7 +158,7 @@ jobs:
           cd ..
 
       # ============================================
-      # FIND AND PACKAGE APP
+      # PACKAGE IPA
       # ============================================
       - name: Package IPA
         run: |
@@ -189,6 +178,7 @@ jobs:
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r gymapp2-unsigned.ipa Payload/
+          echo "IPA created!"
 
       # ============================================
       # UPLOAD IPA
@@ -212,7 +202,7 @@ jobs:
           ls -laR
           echo "=== app.json ==="
           cat app.json 2>/dev/null || echo "No app.json"
-          echo "=== package.json ==="
-          cat package.json | head -30
           echo "=== iOS folder ==="
           ls -la ios/ 2>/dev/null || echo "No ios folder"
+          echo "=== Pods error log ==="
+          cat ios/Pods/Pods.xcodeproj/project.pbxproj 2>/dev/null | head -50
