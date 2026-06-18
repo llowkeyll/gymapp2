@@ -1,0 +1,6 @@
+{
+  "name": "Calorie Scan & Health Tracker",
+  "description": "Log calories from food photos using cost-efficient Gemini AI, track water intake with notifications, and count steps via phone sensors.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

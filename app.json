@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "59918c2b-8aec-4f48-b5f8-eec5f99b8816"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.llowkeyll.reactexample",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": true
+      }
+    },
+    "android": {
+      "package": "com.llowkeyll.reactexample"
+    }
+  }
+}
