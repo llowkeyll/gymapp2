@@ -23,10 +23,10 @@ jobs:
         run: npm install
 
       - name: Auto-Fix React Native Versions
-        run: npx expo install --fix
+        run: npx eas-cli install --fix
 
       - name: Expo Prebuild
-        run: npx expo prebuild -p ios --clean
+        run: npx eas-cli prebuild -p ios --clean
 
       - name: Build Unsigned IPA (Bypassing Apple Developer)
         run: |
