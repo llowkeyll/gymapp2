@@ -156,13 +156,13 @@ jobs:
           cat app.json
 
       # ============================================================
-      # STEP 8: GENERATE IOS FOLDER (8 METHODS)
+      # STEP 8: GENERATE IOS FOLDER (5 METHODS)
       # ============================================================
-      - name: Generate iOS folder (8 METHODS)
+      - name: Generate iOS folder (5 METHODS)
         id: generate_ios
         run: |
           echo "=========================================="
-          echo "GENERATING IOS FOLDER - 8 METHODS"
+          echo "GENERATING IOS FOLDER - 5 METHODS"
           echo "=========================================="
           
           rm -rf ios
@@ -221,7 +221,6 @@ jobs:
             use_frameworks! :linkage => :static
             pod 'React'
             pod 'React-Core'
-            pod 'React-DevSupport'
             pod 'React-RCTActionSheet'
             pod 'React-RCTAnimation'
             pod 'React-RCTBlob'
@@ -237,7 +236,18 @@ jobs:
             pod 'React-jsiexecutor'
             pod 'React-jsinspector'
             pod 'ReactCommon'
-            pod 'React-runtimeexecutor'
+            pod 'Yoga'
+            pod 'FBLazyVector'
+            pod 'RCTRequired'
+            pod 'RCTTypeSafety'
+            pod 'React-RCTFabric'
+            pod 'React-Fabric'
+            pod 'React-FabricComponents'
+            pod 'React-FabricImage'
+            pod 'React-ImageManager'
+            pod 'React-Mapbuffer'
+            pod 'React-RCTAppDelegate'
+            pod 'React-CoreModules'
             pod 'React-RuntimeApple'
             pod 'React-RuntimeCore'
             pod 'React-RuntimeHermes'
@@ -251,51 +261,9 @@ jobs:
             pod 'React-rendererdebug'
             pod 'React-logger'
             pod 'React-perflogger'
-            pod 'Yoga'
-            pod 'FBLazyVector'
-            pod 'RCTRequired'
-            pod 'RCTTypeSafety'
-            pod 'React-RCTFabric'
-            pod 'React-Fabric'
-            pod 'React-FabricComponents'
-            pod 'React-FabricImage'
-            pod 'React-ImageManager'
-            pod 'React-Mapbuffer'
-            pod 'React-RCTAppDelegate'
-            pod 'React-CoreModules'
-            pod 'React-domnativemodule'
-            pod 'React-defaultsnativemodule'
-            pod 'React-featureflagsnativemodule'
-            pod 'React-idlecallbacksnativemodule'
-            pod 'React-intersectionobservernativemodule'
-            pod 'React-microtasksnativemodule'
-            pod 'React-mutationobservernativemodule'
-            pod 'React-viewtransitionnativemodule'
-            pod 'React-webperformancenativemodule'
+            pod 'React-runtimeexecutor'
             pod 'React-NativeModulesApple'
-            pod 'React-RCTFBReactNativeSpec'
-            pod 'React-RCTBlob'
-            pod 'React-networking'
-            pod 'React-timing'
-            pod 'React-jsinspectornetwork'
-            pod 'React-jsinspectortracing'
-            pod 'React-jsinspectorcdp'
-            pod 'React-jsitooling'
-            pod 'React-jsitracing'
-            pod 'React-oscompat'
-            pod 'React-performancecdpmetrics'
-            pod 'React-performancetimeline'
-            pod 'React-rendererconsistency'
-            pod 'React-renderercss'
-            pod 'React-perflogger'
-            pod 'React-jserrorhandler'
-            pod 'React-jsinspector'
-            pod 'React-hermes'
-            pod 'React-native'
-            
-            # Expo Modules
             pod 'ExpoModulesCore'
-            pod 'ExpoModulesJSI'
             
             post_install do |installer|
               installer.pods_project.targets.each do |target|
@@ -314,12 +282,55 @@ jobs:
             echo "IOS_GENERATED=true" >> $GITHUB_ENV
             exit 0
           else
+            echo "❌ METHOD 4 FAILED"
+          fi
+          
+          # ==========================================================
+          # METHOD 5: Expo run:ios
+          # ==========================================================
+          echo "=== METHOD 5: Expo run:ios ==="
+          npx expo run:ios --no-build-cache --no-install --no-dev
+          if [ -d "ios" ]; then
+            echo "✅ METHOD 5 SUCCESS"
+            echo "IOS_GENERATED=true" >> $GITHUB_ENV
+            exit 0
+          else
             echo "❌ ALL METHODS FAILED!"
             exit 1
           fi
 
       # ============================================================
-      # STEP 9: INSTALL PODS (4 METHODS)
+      # STEP 9: FIX PODFILE (WITHOUT BACKTICKS)
+      # ============================================================
+      - name: Fix Podfile
+        run: |
+          echo "=========================================="
+          echo "FIXING PODFILE - NO BACKTICKS"
+          echo "=========================================="
+          cd ios || exit 1
+          
+          # Use a simple, stable Podfile without backticks
+          cat > Podfile << 'EOF'
+          platform :ios, '13.0'
+          require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+
+          $RCT_NEW_ARCH_ENABLED = 0
+
+          target 'gymapp2' do
+            use_react_native!(:path => '../node_modules/react-native')
+            
+            post_install do |installer|
+              react_native_post_install(installer)
+            end
+          end
+          EOF
+          
+          echo "✅ Podfile created"
+          cat Podfile
+          cd ..
+
+      # ============================================================
+      # STEP 10: INSTALL PODS (4 METHODS)
       # ============================================================
       - name: Install Pods (4 METHODS)
         run: |
@@ -329,68 +340,6 @@ jobs:
           
           sudo gem install cocoapods
           cd ios || exit 1
-          
-          # Create a simple Podfile if it doesn't exist or is invalid
-          cat > Podfile << 'EOF'
-          platform :ios, '13.0'
-          target 'gymapp2' do
-            use_frameworks! :linkage => :static
-            pod 'React'
-            pod 'React-Core'
-            pod 'React-RCTActionSheet'
-            pod 'React-RCTAnimation'
-            pod 'React-RCTBlob'
-            pod 'React-RCTImage'
-            pod 'React-RCTLinking'
-            pod 'React-RCTNetwork'
-            pod 'React-RCTSettings'
-            pod 'React-RCTText'
-            pod 'React-RCTVibration'
-            pod 'React-RCTWebSocket'
-            pod 'React-cxxreact'
-            pod 'React-jsi'
-            pod 'React-jsiexecutor'
-            pod 'React-jsinspector'
-            pod 'ReactCommon'
-            pod 'Yoga'
-            pod 'FBLazyVector'
-            pod 'RCTRequired'
-            pod 'RCTTypeSafety'
-            pod 'React-RCTFabric'
-            pod 'React-Fabric'
-            pod 'React-FabricComponents'
-            pod 'React-FabricImage'
-            pod 'React-ImageManager'
-            pod 'React-Mapbuffer'
-            pod 'React-RCTAppDelegate'
-            pod 'React-CoreModules'
-            pod 'React-RuntimeApple'
-            pod 'React-RuntimeCore'
-            pod 'React-RuntimeHermes'
-            pod 'React-hermes'
-            pod 'React-graphics'
-            pod 'React-debug'
-            pod 'React-featureflags'
-            pod 'React-utils'
-            pod 'React-callinvoker'
-            pod 'React-runtimescheduler'
-            pod 'React-rendererdebug'
-            pod 'React-logger'
-            pod 'React-perflogger'
-            pod 'React-runtimeexecutor'
-            pod 'React-NativeModulesApple'
-            
-            post_install do |installer|
-              installer.pods_project.targets.each do |target|
-                target.build_configurations.each do |config|
-                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
-                  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-                  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-                end
-              end
-            end
-          end
-          EOF
           
           echo "=== PODS METHOD 1: pod install ==="
           pod install
@@ -432,7 +381,7 @@ jobs:
           cd ..
 
       # ============================================================
-      # STEP 10: FIND WORKSPACE
+      # STEP 11: FIND WORKSPACE
       # ============================================================
       - name: Find workspace
         id: find_workspace
@@ -468,7 +417,7 @@ jobs:
           cd ..
 
       # ============================================================
-      # STEP 11: BUILD APP (3 METHODS)
+      # STEP 12: BUILD APP (3 METHODS)
       # ============================================================
       - name: Build iOS app (3 METHODS)
         run: |
@@ -528,7 +477,7 @@ jobs:
           cd ..
 
       # ============================================================
-      # STEP 12: FIND APP (4 LOCATIONS)
+      # STEP 13: FIND APP (4 LOCATIONS)
       # ============================================================
       - name: Find app
         id: find_app
@@ -566,7 +515,7 @@ jobs:
           echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
 
       # ============================================================
-      # STEP 13: VERIFY APP
+      # STEP 14: VERIFY APP
       # ============================================================
       - name: Verify app
         run: |
@@ -587,7 +536,7 @@ jobs:
           echo "✅ App verified"
 
       # ============================================================
-      # STEP 14: CREATE UNSIGNED IPA
+      # STEP 15: CREATE UNSIGNED IPA
       # ============================================================
       - name: Create unsigned IPA
         run: |
@@ -618,7 +567,7 @@ jobs:
           echo "✅ Unsigned IPA created successfully!"
 
       # ============================================================
-      # STEP 15: DOWNLOAD ZSIGN
+      # STEP 16: DOWNLOAD ZSIGN
       # ============================================================
       - name: Download zsign
         run: |
@@ -638,7 +587,7 @@ jobs:
           fi
 
       # ============================================================
-      # STEP 16: FIND CERTIFICATE AND PROFILE
+      # STEP 17: FIND CERTIFICATE AND PROFILE
       # ============================================================
       - name: Find certificate and profile
         id: find_cert
@@ -668,7 +617,7 @@ jobs:
           echo "PROFILE_FILE=$PROFILE_FILE" >> $GITHUB_ENV
 
       # ============================================================
-      # STEP 17: SIGN THE IPA (3 METHODS)
+      # STEP 18: SIGN THE IPA (3 METHODS)
       # ============================================================
       - name: Sign IPA (3 METHODS)
         run: |
@@ -713,7 +662,7 @@ jobs:
           fi
 
       # ============================================================
-      # STEP 18: VERIFY SIGNED IPA
+      # STEP 19: VERIFY SIGNED IPA
       # ============================================================
       - name: Verify signed IPA
         run: |
@@ -732,7 +681,7 @@ jobs:
           fi
 
       # ============================================================
-      # STEP 19: UPLOAD UNSIGNED IPA
+      # STEP 20: UPLOAD UNSIGNED IPA
       # ============================================================
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
@@ -743,7 +692,7 @@ jobs:
           retention-days: 30
 
       # ============================================================
-      # STEP 20: UPLOAD SIGNED IPA
+      # STEP 21: UPLOAD SIGNED IPA
       # ============================================================
       - name: Upload signed IPA
         uses: actions/upload-artifact@v4
@@ -754,7 +703,7 @@ jobs:
           retention-days: 30
 
       # ============================================================
-      # STEP 21: UPLOAD BUILD LOGS
+      # STEP 22: UPLOAD BUILD LOGS
       # ============================================================
       - name: Upload build logs
         if: always()
@@ -771,7 +720,7 @@ jobs:
           retention-days: 7
 
       # ============================================================
-      # STEP 22: SUCCESS MESSAGE
+      # STEP 23: SUCCESS MESSAGE
       # ============================================================
       - name: Build and sign complete!
         if: success()
@@ -795,7 +744,7 @@ jobs:
           echo "============================================================"
 
       # ============================================================
-      # STEP 23: DEBUG ON FAILURE
+      # STEP 24: DEBUG ON FAILURE
       # ============================================================
       - name: Debug on failure
         if: failure()
