@@ -1,11 +1,10 @@
-name: Build iOS IPA (AltStore)
+name: Build iOS IPA (EAS Local)
 
 on:
   workflow_dispatch:
 
-# This tells the server to auto-answer "Yes" to all Expo prompts
 env:
-  CI: 1 
+  CI: 1 # This forces EAS to never stop and ask questions
 
 jobs:
   build-ios:
@@ -19,39 +18,19 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
       - name: Install Dependencies
         run: npm install
 
-      - name: Auto-Fix React Native Versions
-        run: npx eas-cli install --fix
-
-      - name: Expo Prebuild
-        run: npx eas-cli prebuild -p ios --clean
-
-      - name: Build Unsigned IPA (Bypassing Apple Developer)
-        run: |
-          cd ios
-          WORKSPACE=$(ls | grep .xcworkspace | head -1)
-          SCHEME=$(ls | grep .xcworkspace | head -1 | sed 's/.xcworkspace//')
-          
-          # Using 'build' instead of 'archive' bypasses Apple's Developer Team block entirely
-          xcodebuild build \
-            -workspace "$WORKSPACE" \
-            -scheme "$SCHEME" \
-            -configuration Release \
-            -sdk iphoneos \
-            -derivedDataPath $PWD/DerivedData \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY=""
-            
-          # Package the raw compiled app into an .ipa format
-          mkdir -p Payload
-          cp -R DerivedData/Build/Products/Release-iphoneos/*.app Payload/
-          zip -r ../app.ipa Payload
+      - name: Build Unsigned IPA via EAS
+        # --local forces EAS to build directly on this free GitHub Mac.
+        # It automatically bypasses Expo servers and Apple Developer requirements!
+        run: eas build --platform ios --local --profile preview
 
       - name: Upload IPA File
         uses: actions/upload-artifact@v4
         with:
           name: WeightTracker-IPA
-          path: app.ipa
+          path: "*.ipa" # Grabs the IPA file EAS generates
