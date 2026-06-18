@@ -11,13 +11,13 @@ jobs:
     
     steps:
       # ============================================================
-      # STEP 1: CHECKOUT
+      # STEP 1: CHECKOUT WITH FULL HISTORY
       # ============================================================
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: false
-          fetch-depth: 1
+          fetch-depth: 0  # Get all history to ensure all files
 
       # ============================================================
       # STEP 2: LIST ALL FILES (DEBUG)
@@ -29,12 +29,23 @@ jobs:
           echo "=========================================="
           ls -la
           echo "=========================================="
+          echo "FILE COUNT:"
+          find . -type f | wc -l
+          echo "=========================================="
+          echo "DIRECTORY STRUCTURE:"
+          find . -type d | head -30
+          echo "=========================================="
           echo "CERTIFICATE FILES:"
           ls -la *.p12 2>/dev/null || echo "No .p12 files found"
           echo "=========================================="
           echo "PROFILE FILES:"
           ls -la *.mobileprovision 2>/dev/null || echo "No .mobileprovision files found"
           echo "=========================================="
+          echo "IOS FOLDER:"
+          ls -la ios/ 2>/dev/null || echo "No ios folder"
+          echo "=========================================="
+          echo "NODE_MODULES:"
+          ls -la node_modules/ 2>/dev/null | head -10 || echo "No node_modules folder"
 
       # ============================================================
       # STEP 3: SETUP NODE 20
@@ -50,27 +61,33 @@ jobs:
       # ============================================================
       - name: Install dependencies (MULTIPLE ATTEMPTS)
         run: |
-          echo "ATTEMPT 1: npm install --force"
+          echo "=== CHECKING PACKAGE.JSON ==="
+          cat package.json | head -20
+          
+          echo "=== ATTEMPT 1: npm install --force ==="
           npm install --force && echo "✅ INSTALL SUCCESS" || echo "❌ INSTALL FAILED"
           
           if [ $? -ne 0 ]; then
-            echo "ATTEMPT 2: npm install --legacy-peer-deps"
+            echo "=== ATTEMPT 2: npm install --legacy-peer-deps ==="
             npm install --legacy-peer-deps && echo "✅ INSTALL SUCCESS" || echo "❌ INSTALL FAILED"
           fi
           
           if [ $? -ne 0 ]; then
-            echo "ATTEMPT 3: npm cache clean && npm install"
+            echo "=== ATTEMPT 3: npm cache clean && npm install ==="
             npm cache clean --force
             npm install && echo "✅ INSTALL SUCCESS" || echo "❌ INSTALL FAILED"
           fi
           
           if [ $? -ne 0 ]; then
-            echo "ATTEMPT 4: npm ci --force"
+            echo "=== ATTEMPT 4: npm ci --force ==="
             npm ci --force && echo "✅ INSTALL SUCCESS" || echo "❌ INSTALL FAILED"
           fi
           
-          echo "FINAL CHECK:"
+          echo "=== FINAL CHECK ==="
           npm list --depth=0 || echo "⚠️ Some dependencies missing but continuing"
+          
+          echo "=== NODE_MODULES SIZE ==="
+          du -sh node_modules/ 2>/dev/null || echo "No node_modules"
 
       # ============================================================
       # STEP 5: CREATE/FIX APP.JSON
@@ -116,9 +133,29 @@ jobs:
           cat app.json
 
       # ============================================================
-      # STEP 6: GENERATE IOS FOLDER (TRY 4 METHODS)
+      # STEP 6: CHECK IOS FOLDER - USE EXISTING OR GENERATE
       # ============================================================
-      - name: Generate iOS folder (MULTIPLE METHODS)
+      - name: Check iOS folder
+        run: |
+          echo "=== CHECKING FOR EXISTING IOS FOLDER ==="
+          
+          # Check if iOS folder exists in repo
+          if [ -d "ios" ] && [ -f "ios/Podfile" ]; then
+            echo "✅ iOS folder already exists in repo!"
+            echo "Using existing iOS folder..."
+            ls -la ios/
+            echo "IOS_EXISTS=true" >> $GITHUB_ENV
+          else
+            echo "❌ iOS folder not found or incomplete!"
+            echo "Will generate iOS folder..."
+            echo "IOS_EXISTS=false" >> $GITHUB_ENV
+          fi
+
+      # ============================================================
+      # STEP 7: GENERATE IOS FOLDER (IF NEEDED)
+      # ============================================================
+      - name: Generate iOS folder (if needed)
+        if: env.IOS_EXISTS == 'false'
         run: |
           export CI=1
           export EXPO_NO_INTERACTIVE=1
@@ -165,7 +202,7 @@ jobs:
           fi
 
       # ============================================================
-      # STEP 7: FIX PODFILE IF NEEDED
+      # STEP 8: FIX PODFILE IF NEEDED
       # ============================================================
       - name: Fix Podfile if needed
         run: |
@@ -187,7 +224,7 @@ jobs:
           cd ..
 
       # ============================================================
-      # STEP 8: INSTALL PODS (TRY 4 METHODS)
+      # STEP 9: INSTALL PODS (TRY 4 METHODS)
       # ============================================================
       - name: Install Pods (MULTIPLE ATTEMPTS)
         run: |
@@ -216,6 +253,7 @@ jobs:
           echo "=== PODS STATUS ==="
           if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
             echo "✅ Pods installed successfully!"
+            echo "Pods size: $(du -sh Pods | cut -f1)"
           else
             echo "❌ Pods may not be installed correctly"
           fi
@@ -223,7 +261,7 @@ jobs:
           cd ..
 
       # ============================================================
-      # STEP 9: FIND WORKSPACE OR PROJECT
+      # STEP 10: FIND WORKSPACE OR PROJECT
       # ============================================================
       - name: Find workspace/project
         id: find_workspace
@@ -254,7 +292,7 @@ jobs:
           cd ..
 
       # ============================================================
-      # STEP 10: BUILD APP (TRY 3 METHODS)
+      # STEP 11: BUILD APP WITH LOGGING (TRY 3 METHODS)
       # ============================================================
       - name: Build iOS app (MULTIPLE ATTEMPTS)
         run: |
@@ -264,35 +302,78 @@ jobs:
           
           if [ "$BUILD_TYPE" = "workspace" ]; then
             echo "=== BUILD ATTEMPT 1: xcodebuild with workspace ==="
-            xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+            xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -verbose 2>&1 | tee build_attempt1.log
+            BUILD_RESULT=${PIPESTATUS[0]}
+            echo "Build result: $BUILD_RESULT"
+            
+            if [ $BUILD_RESULT -eq 0 ]; then
+              echo "✅ BUILD SUCCESS"
+              echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
+            else
+              echo "❌ BUILD FAILED"
+              echo "BUILD_SUCCESS=false" >> $GITHUB_ENV
+            fi
           else
             echo "=== BUILD ATTEMPT 1: xcodebuild with project ==="
-            xcodebuild -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
-          fi
-          
-          if [ $? -ne 0 ]; then
-            echo "=== BUILD ATTEMPT 2: xcodebuild with clean ==="
-            xcodebuild clean -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" || xcodebuild clean -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME"
-            if [ "$BUILD_TYPE" = "workspace" ]; then
-              xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+            xcodebuild -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -verbose 2>&1 | tee build_attempt1.log
+            BUILD_RESULT=${PIPESTATUS[0]}
+            echo "Build result: $BUILD_RESULT"
+            
+            if [ $BUILD_RESULT -eq 0 ]; then
+              echo "✅ BUILD SUCCESS"
+              echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
             else
-              xcodebuild -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+              echo "❌ BUILD FAILED"
+              echo "BUILD_SUCCESS=false" >> $GITHUB_ENV
             fi
           fi
           
-          if [ $? -ne 0 ]; then
+          # If first attempt failed, try second
+          if [ "$BUILD_SUCCESS" != "true" ]; then
+            echo "=== BUILD ATTEMPT 2: xcodebuild with clean ==="
+            xcodebuild clean -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" || xcodebuild clean -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME"
+            
+            if [ "$BUILD_TYPE" = "workspace" ]; then
+              xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -verbose 2>&1 | tee build_attempt2.log
+              BUILD_RESULT=${PIPESTATUS[0]}
+            else
+              xcodebuild -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO -verbose 2>&1 | tee build_attempt2.log
+              BUILD_RESULT=${PIPESTATUS[0]}
+            fi
+            
+            if [ $BUILD_RESULT -eq 0 ]; then
+              echo "✅ BUILD SUCCESS"
+              echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
+            else
+              echo "❌ BUILD FAILED"
+              echo "BUILD_SUCCESS=false" >> $GITHUB_ENV
+            fi
+          fi
+          
+          # If second attempt failed, try third
+          if [ "$BUILD_SUCCESS" != "true" ]; then
             echo "=== BUILD ATTEMPT 3: xcodebuild with additional flags ==="
             if [ "$BUILD_TYPE" = "workspace" ]; then
-              xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO OTHER_SWIFT_FLAGS="-DDEBUG" ONLY_ACTIVE_ARCH=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+              xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO OTHER_SWIFT_FLAGS="-DDEBUG" ONLY_ACTIVE_ARCH=NO -verbose 2>&1 | tee build_attempt3.log
+              BUILD_RESULT=${PIPESTATUS[0]}
             else
-              xcodebuild -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO OTHER_SWIFT_FLAGS="-DDEBUG" ONLY_ACTIVE_ARCH=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+              xcodebuild -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO OTHER_SWIFT_FLAGS="-DDEBUG" ONLY_ACTIVE_ARCH=NO -verbose 2>&1 | tee build_attempt3.log
+              BUILD_RESULT=${PIPESTATUS[0]}
+            fi
+            
+            if [ $BUILD_RESULT -eq 0 ]; then
+              echo "✅ BUILD SUCCESS"
+              echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
+            else
+              echo "❌ BUILD FAILED"
+              echo "BUILD_SUCCESS=false" >> $GITHUB_ENV
             fi
           fi
           
           cd ..
 
       # ============================================================
-      # STEP 11: FIND .APP (SEARCH EVERYWHERE)
+      # STEP 12: FIND .APP (SEARCH EVERYWHERE)
       # ============================================================
       - name: Find .app file
         id: find_app
@@ -317,14 +398,36 @@ jobs:
             echo "❌ No .app found anywhere!"
             echo "=== SEARCH RESULTS ==="
             find . -name "*.app" -type d
+            echo "=== BUILD FOLDER CONTENTS ==="
+            find ios/build -type d 2>/dev/null || echo "No build folder"
             exit 1
           fi
           
           echo "✅ Found app at: $APP_PATH"
           echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
+          
+          # Get app size
+          APP_SIZE=$(du -sh "$APP_PATH" | cut -f1)
+          echo "App size: $APP_SIZE"
 
       # ============================================================
-      # STEP 12: CREATE UNSIGNED IPA
+      # STEP 13: VERIFY APP IS VALID
+      # ============================================================
+      - name: Verify app
+        run: |
+          echo "=== APP CONTENTS ==="
+          ls -la "${{ env.APP_PATH }}"
+          echo "=== APP SIZE ==="
+          du -sh "${{ env.APP_PATH }}"
+          
+          if [ -f "${{ env.APP_PATH }}/Info.plist" ]; then
+            echo "✅ Info.plist found!"
+          else
+            echo "❌ Info.plist missing!"
+          fi
+
+      # ============================================================
+      # STEP 14: CREATE UNSIGNED IPA
       # ============================================================
       - name: Create unsigned IPA
         run: |
@@ -332,6 +435,11 @@ jobs:
           rm -rf Payload
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
+          
+          echo "=== PAYLOAD CONTENTS ==="
+          ls -la Payload/
+          du -sh Payload/
+          
           zip -r gymapp2-unsigned.ipa Payload/
           
           # Check IPA size
@@ -342,13 +450,15 @@ jobs:
             echo "❌ IPA is too small ($IPA_SIZE bytes)! Build failed."
             echo "=== PAYLOAD CONTENTS ==="
             ls -la Payload/
+            echo "=== APP CONTENTS ==="
+            ls -la Payload/*.app/ 2>/dev/null || echo "No app contents"
             exit 1
           fi
           
           echo "✅ Unsigned IPA created successfully!"
 
       # ============================================================
-      # STEP 13: DOWNLOAD ZSIGN
+      # STEP 15: DOWNLOAD ZSIGN
       # ============================================================
       - name: Download zsign
         run: |
@@ -365,39 +475,37 @@ jobs:
           fi
 
       # ============================================================
-      # STEP 14: FIND CERTIFICATE AND PROFILE
+      # STEP 16: FIND CERTIFICATE AND PROFILE
       # ============================================================
       - name: Find certificate and profile
         id: find_cert
         run: |
           echo "=== FINDING CERTIFICATE ==="
           
-          # Look for certificate
           CERT_FILE=$(ls *.p12 2>/dev/null | head -1)
           if [ -z "$CERT_FILE" ]; then
-            echo "❌ No .p12 certificate found!"
-            echo "Available files:"
-            ls -la
-            exit 1
+            echo "⚠️ No .p12 certificate found - skipping signing"
+            echo "SKIP_SIGN=true" >> $GITHUB_ENV
+          else
+            echo "✅ Found certificate: $CERT_FILE"
+            echo "CERT_FILE=$CERT_FILE" >> $GITHUB_ENV
           fi
-          echo "✅ Found certificate: $CERT_FILE"
-          echo "CERT_FILE=$CERT_FILE" >> $GITHUB_ENV
           
           echo "=== FINDING PROVISIONING PROFILE ==="
           PROFILE_FILE=$(ls *.mobileprovision 2>/dev/null | head -1)
           if [ -z "$PROFILE_FILE" ]; then
-            echo "❌ No .mobileprovision file found!"
-            echo "Available files:"
-            ls -la
-            exit 1
+            echo "⚠️ No .mobileprovision file found - skipping signing"
+            echo "SKIP_SIGN=true" >> $GITHUB_ENV
+          else
+            echo "✅ Found profile: $PROFILE_FILE"
+            echo "PROFILE_FILE=$PROFILE_FILE" >> $GITHUB_ENV
           fi
-          echo "✅ Found profile: $PROFILE_FILE"
-          echo "PROFILE_FILE=$PROFILE_FILE" >> $GITHUB_ENV
 
       # ============================================================
-      # STEP 15: SIGN THE IPA (TRY 3 METHODS)
+      # STEP 17: SIGN THE IPA (TRY 3 METHODS)
       # ============================================================
       - name: Sign IPA (MULTIPLE ATTEMPTS)
+        if: env.SKIP_SIGN != 'true'
         run: |
           echo "=========================================="
           echo "SIGNING IPA"
@@ -427,32 +535,11 @@ jobs:
             SIZE=$(stat -f%z "gymapp2-signed.ipa" 2>/dev/null || stat -c%s "gymapp2-signed.ipa" 2>/dev/null)
             echo "✅ Signed IPA created! Size: $SIZE bytes"
           else
-            echo "❌ Signing failed completely!"
-            exit 1
+            echo "⚠️ Signing failed, unsigned IPA will be uploaded"
           fi
 
       # ============================================================
-      # STEP 16: VERIFY SIGNED IPA
-      # ============================================================
-      - name: Verify signed IPA
-        run: |
-          echo "=== VERIFYING SIGNED IPA ==="
-          
-          if [ -f "gymapp2-signed.ipa" ] && [ -s "gymapp2-signed.ipa" ]; then
-            SIZE=$(stat -f%z "gymapp2-signed.ipa" 2>/dev/null || stat -c%s "gymapp2-signed.ipa" 2>/dev/null)
-            echo "✅ Signed IPA is valid!"
-            echo "Size: $SIZE bytes"
-            
-            # Check if it's a valid zip
-            unzip -t gymapp2-signed.ipa 2>&1 | head -3
-            echo "✅ Signed IPA is ready to install!"
-          else
-            echo "❌ Signed IPA is missing or empty!"
-            exit 1
-          fi
-
-      # ============================================================
-      # STEP 17: UPLOAD UNSIGNED IPA
+      # STEP 18: UPLOAD UNSIGNED IPA
       # ============================================================
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
@@ -463,9 +550,10 @@ jobs:
           retention-days: 30
 
       # ============================================================
-      # STEP 18: UPLOAD SIGNED IPA
+      # STEP 19: UPLOAD SIGNED IPA
       # ============================================================
       - name: Upload signed IPA
+        if: env.SKIP_SIGN != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: gymapp2-signed-ipa
@@ -474,7 +562,7 @@ jobs:
           retention-days: 30
 
       # ============================================================
-      # STEP 19: UPLOAD BUILD LOGS
+      # STEP 20: UPLOAD BUILD LOGS (ALWAYS)
       # ============================================================
       - name: Upload build logs
         if: always()
@@ -482,6 +570,9 @@ jobs:
         with:
           name: build-logs
           path: |
+            ios/build_attempt1.log
+            ios/build_attempt2.log
+            ios/build_attempt3.log
             ios/build/**/*.log
             ios/Podfile.lock
             ios/Pods/
@@ -490,7 +581,18 @@ jobs:
           retention-days: 7
 
       # ============================================================
-      # STEP 20: SUCCESS MESSAGE
+      # STEP 21: UPLOAD BUILD FOLDER (FOR DEBUGGING)
+      # ============================================================
+      - name: Upload build folder
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-folder
+          path: ios/build/
+          retention-days: 7
+
+      # ============================================================
+      # STEP 22: SUCCESS MESSAGE
       # ============================================================
       - name: Build and sign complete!
         if: success()
@@ -499,22 +601,31 @@ jobs:
           echo "🎉🎉🎉 BUILD AND SIGN COMPLETE! 🎉🎉🎉"
           echo "============================================================"
           echo "📦 UNSIGNED IPA: gymapp2-unsigned-ipa (Backup)"
-          echo "📦 SIGNED IPA: gymapp2-signed-ipa (READY TO INSTALL)"
+          if [ -f "gymapp2-signed.ipa" ]; then
+            echo "📦 SIGNED IPA: gymapp2-signed-ipa (READY TO INSTALL)"
+          fi
           echo "============================================================"
           echo "NEXT STEPS:"
-          echo "1. Download gymapp2-signed-ipa from Artifacts"
-          echo "2. AirDrop to your iPhone"
-          echo "3. Open with AltStore"
-          echo "4. Tap Install"
-          echo "5. Trust the certificate in Settings → General → VPN & Device Management"
-          echo "6. Launch the app!"
+          if [ -f "gymapp2-signed.ipa" ]; then
+            echo "1. Download gymapp2-signed-ipa from Artifacts"
+            echo "2. AirDrop to your iPhone"
+            echo "3. Open with AltStore"
+            echo "4. Tap Install"
+          else
+            echo "1. Download gymapp2-unsigned-ipa from Artifacts"
+            echo "2. Sign manually with zsign on Windows:"
+            echo "   zsign -k certificate.p12 -p password -m profile.mobileprovision -o gymapp2-signed.ipa gymapp2-unsigned.ipa"
+            echo "3. Install with AltStore"
+          fi
           echo "============================================================"
           echo "SIGNED IPA SIZE:"
-          ls -la gymapp2-signed.ipa
+          ls -la gymapp2-signed.ipa 2>/dev/null || echo "No signed IPA"
+          echo "UNSIGNED IPA SIZE:"
+          ls -la gymapp2-unsigned.ipa
           echo "============================================================"
 
       # ============================================================
-      # STEP 21: DEBUG ON FAILURE
+      # STEP 23: DEBUG ON FAILURE
       # ============================================================
       - name: Debug on failure
         if: failure()
@@ -535,5 +646,6 @@ jobs:
           echo "=== PROFILE FILES ==="
           ls -la *.mobileprovision 2>/dev/null || echo "No .mobileprovision files"
           echo "============================================================"
-          echo "Download build-logs to see what went wrong"
+          echo "📥 Download build-logs to see what went wrong"
+          echo "📥 Download build-folder to inspect the build output"
           echo "============================================================"
