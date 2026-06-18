@@ -1,36 +1,31 @@
-name: Build iOS IPA (EAS Local)
+name: Build iOS IPA
 
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 
-env:
-  CI: 1 # This forces EAS to never stop and ask questions
-
 jobs:
-  build-ios:
-    runs-on: macos-14
+  build:
+    runs-on: macos-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v3
+      
+      - name: Setup Xcode
+        run: sudo xcode-select -switch /Applications/Xcode.app
+      
+      - name: Build iOS App
+        run: |
+          xcodebuild -workspace YourApp.xcworkspace -scheme YourApp -configuration Release -derivedDataPath build -sdk iphoneos
+      
+      - name: Create IPA
+        run: |
+          mkdir Payload
+          cp -R build/Build/Products/Release-iphoneos/YourApp.app Payload/
+          zip -r YourApp.ipa Payload/
+      
+      - name: Upload IPA
+        uses: actions/upload-artifact@v3
         with:
-          node-version: '20'
-
-      - name: Install EAS CLI
-        run: npm install -g eas-cli
-
-      - name: Install Dependencies
-        run: npm install
-
-      - name: Build Unsigned IPA via EAS
-        # --local forces EAS to build directly on this free GitHub Mac.
-        # It automatically bypasses Expo servers and Apple Developer requirements!
-        run: eas build --platform ios --local --profile preview
-
-      - name: Upload IPA File
-        uses: actions/upload-artifact@v4
-        with:
-          name: WeightTracker-IPA
-          path: "*.ipa" # Grabs the IPA file EAS generates
+          name: YourApp
+          path: YourApp.ipa
