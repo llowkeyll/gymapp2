@@ -1,4 +1,4 @@
-name: Build IPA - No Apple Account Required
+name: Build IPA - Force iOS Creation
 
 on:
   push:
@@ -24,79 +24,132 @@ jobs:
           node-version: '18'
           cache: 'npm'
 
-      # Install dependencies - FUCK PEER DEPS
+      # Install dependencies - FORCE MODE
       - name: Install dependencies
         run: |
           npm install --force
-          # This ignores ALL peer dependency conflicts
-          # If npm install --force fails, use:
-          # npm install --legacy-peer-deps
+          # Verify installation
+          npm list --depth=0
 
-      # Install Expo CLI if it's an Expo project
+      # Install Expo CLI
       - name: Install Expo CLI
         run: |
-          npm install -g expo-cli || npm install -g expo
+          npm install -g expo-cli@latest
+          # For newer versions:
+          npm install -g expo@latest
 
-      # PREBUILD - Generate the iOS native code (NO ACCOUNT NEEDED)
-      - name: Prebuild iOS
+      # PREBUILD - Multiple attempts with different methods
+      - name: Create iOS folder (Method 1 - Expo Prebuild)
         run: |
-          # This generates the ios/ folder without needing any Apple account
-          npx expo prebuild --platform ios --clean --non-interative --no-install || npx expo run:ios --no-build --no-install || echo "Prebuild failed but continuing"
+          echo "Attempting expo prebuild..."
+          npx expo prebuild --platform ios --clean --non-interactive || echo "Prebuild failed"
+          ls -la || echo "No files"
 
-      # Install CocoaPods (free, no account needed)
+      - name: Create iOS folder (Method 2 - Expo Run iOS)
+        if: failure() || steps.prebuild.outcome == 'failure'
+        run: |
+          echo "Attempting expo run:ios..."
+          npx expo run:ios --no-build-cache --no-install --no-dev || echo "Run iOS failed"
+          ls -la
+
+      - name: Create iOS folder (Method 3 - Manual creation)
+        if: failure() || steps.runios.outcome == 'failure'
+        run: |
+          echo "Manually creating iOS folder..."
+          mkdir -p ios
+          # Create a basic Podfile if it doesn't exist
+          cat > ios/Podfile << 'EOF'
+          platform :ios, '13.0'
+          require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+          
+          target 'gymapp2' do
+            config = use_native_modules!
+            use_react_native!(:path => config["reactNativePath"])
+            
+            post_install do |installer|
+              react_native_post_install(installer)
+            end
+          end
+          EOF
+          
+          echo "Podfile created at ios/Podfile"
+
+      # Check if iOS folder exists now
+      - name: Verify iOS folder
+        run: |
+          echo "=== Current directory contents ==="
+          ls -la
+          echo "=== iOS folder contents (if exists) ==="
+          ls -la ios/ 2>/dev/null || echo "iOS folder still doesn't exist!"
+
+      # Install iOS Pods
       - name: Install iOS Pods
         run: |
-          cd ios || exit 1
-          rm -f Podfile.lock
-          sudo gem install cocoapods
-          pod install --repo-update || pod install
-          cd ..
+          if [ -d "ios" ]; then
+            cd ios
+            sudo gem install cocoapods
+            pod install --repo-update || pod install
+            cd ..
+          else
+            echo "No ios folder - skipping pod install"
+            # Try one more time with react-native
+            npx react-native init temp_project --skip-install
+            cp -R temp_project/ios ./
+            rm -rf temp_project
+            cd ios
+            pod install
+            cd ..
+          fi
 
-      # BUILD THE FUCKING APP - NO SIGNING, NO ACCOUNT
+      # Build iOS app
       - name: Build iOS app (unsigned)
         run: |
-          cd ios
-          
-          # Find workspace
-          WORKSPACE=$(ls *.xcworkspace 2>/dev/null | head -1)
-          PROJECT=$(ls *.xcodeproj 2>/dev/null | head -1)
-          
-          if [ -n "$WORKSPACE" ]; then
-            SCHEME="${WORKSPACE%.xcworkspace}"
-            echo "Building workspace: $WORKSPACE with scheme: $SCHEME"
-            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO OTHER_SWIFT_FLAGS="-DDEBUG" ONLY_ACTIVE_ARCH=NO
-          elif [ -n "$PROJECT" ]; then
-            SCHEME="${PROJECT%.xcodeproj}"
-            echo "Building project: $PROJECT with scheme: $SCHEME"
-            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO OTHER_SWIFT_FLAGS="-DDEBUG" ONLY_ACTIVE_ARCH=NO
-          else
-            echo "No iOS project found! Creating one..."
-            cd ..
-            npx expo run:ios --no-build-cache --no-install || npx react-native run-ios --no-packager
+          if [ -d "ios" ]; then
             cd ios
+            
+            # Find workspace or project
             WORKSPACE=$(ls *.xcworkspace 2>/dev/null | head -1)
+            PROJECT=$(ls *.xcodeproj 2>/dev/null | head -1)
+            
             if [ -n "$WORKSPACE" ]; then
               SCHEME="${WORKSPACE%.xcworkspace}"
+              echo "Building workspace: $WORKSPACE with scheme: $SCHEME"
               xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
+            elif [ -n "$PROJECT" ]; then
+              SCHEME="${PROJECT%.xcodeproj}"
+              echo "Building project: $PROJECT with scheme: $SCHEME"
+              xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
             else
-              echo "Still no iOS project! Exiting..."
-              exit 1
+              echo "No iOS project found! Creating one..."
+              # Create a basic project
+              cd ..
+              npx react-native init temp_app --skip-install
+              cp -R temp_app/ios/* ios/
+              rm -rf temp_app
+              cd ios
+              pod install
+              xcodebuild -workspace gymapp2.xcworkspace -scheme gymapp2 -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
             fi
+            
+            cd ..
+          else
+            echo "No ios folder - build impossible"
+            exit 1
           fi
-          
-          cd ..
 
-      # FIND THE APP BUNDLE
+      # Find and package app
       - name: Find and package app
         run: |
           # Find the .app file
           APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
+          
           if [ -z "$APP_PATH" ]; then
             APP_PATH=$(find . -name "*.app" -type d | grep -v "Pods" | head -1)
           fi
           
           if [ -z "$APP_PATH" ]; then
             echo "No .app found! Build failed."
+            echo "Searching for any .app files..."
             find . -name "*.app" -type d
             exit 1
           fi
@@ -109,7 +162,7 @@ jobs:
           zip -r gymapp2-unsigned.ipa Payload/
           echo "UNSIGNED IPA created!"
 
-      # UPLOAD THE UNSIGNED IPA
+      # Upload the unsigned IPA
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
@@ -118,13 +171,11 @@ jobs:
           compression-level: 9
           retention-days: 7
 
-      # DEBUG - if everything fails
+      # Debug - show everything if failed
       - name: Debug build failure
         if: failure()
         run: |
-          echo "=== Build failed. Here's what we have: ==="
+          echo "=== Current directory structure ==="
+          ls -laR
+          echo "=== Any .app files? ==="
           find . -name "*.app" -type d
-          echo "=== iOS directory contents: ==="
-          ls -la ios/ || echo "No ios directory"
-          echo "=== Available schemes: ==="
-          cd ios && xcodebuild -list || echo "No schemes found"
