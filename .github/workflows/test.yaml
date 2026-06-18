@@ -1,0 +1,214 @@
+name: FORCE BUILD REAL IPA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+      # ============================================================
+      # STEP 1: CHECKOUT
+      # ============================================================
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 1
+
+      # ============================================================
+      # STEP 2: SETUP NODE
+      # ============================================================
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ============================================================
+      # STEP 3: INSTALL DEPENDENCIES
+      # ============================================================
+      - name: Install dependencies
+        run: |
+          export CI=1
+          npm install --force
+
+      # ============================================================
+      # STEP 4: CREATE PROPER APP.JSON
+      # ============================================================
+      - name: Create app.json
+        run: |
+          cat > app.json << 'EOF'
+          {
+            "expo": {
+              "name": "gymapp2",
+              "slug": "gymapp2",
+              "version": "1.0.0",
+              "platforms": ["ios", "web"],
+              "ios": {
+                "bundleIdentifier": "com.yourcompany.gymapp2",
+                "supportsTablet": true
+              }
+            }
+          }
+          EOF
+          cat app.json
+
+      # ============================================================
+      # STEP 5: GENERATE IOS FOLDER (FORCE)
+      # ============================================================
+      - name: Generate iOS folder
+        run: |
+          export CI=1
+          export EXPO_NO_INTERACTIVE=1
+          
+          rm -rf ios
+          rm -rf node_modules/.cache
+          
+          # Force prebuild
+          echo "y" | npx expo prebuild --platform ios --clean --non-interative || echo "Prebuild failed"
+          
+          # If no ios folder, create one with react-native init
+          if [ ! -d "ios" ]; then
+            echo "Creating iOS folder with react-native init..."
+            npx react-native init temp_ios --version 0.74.0 --skip-install
+            cp -R temp_ios/ios .
+            rm -rf temp_ios
+          fi
+
+      # ============================================================
+      # STEP 6: INSTALL PODS
+      # ============================================================
+      - name: Install Pods
+        run: |
+          sudo gem install cocoapods
+          cd ios || exit 1
+          rm -f Podfile.lock
+          pod install --repo-update || pod install
+          cd ..
+
+      # ============================================================
+      # STEP 7: FIND WORKSPACE
+      # ============================================================
+      - name: Find workspace
+        id: find_workspace
+        run: |
+          cd ios || exit 1
+          
+          WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -type d | head -1)
+          SCHEME=$(basename "$WORKSPACE" .xcworkspace)
+          
+          echo "workspace=$WORKSPACE" >> $GITHUB_OUTPUT
+          echo "scheme=$SCHEME" >> $GITHUB_OUTPUT
+          echo "✅ Found workspace: $WORKSPACE"
+          echo "✅ Scheme: $SCHEME"
+          
+          cd ..
+
+      # ============================================================
+      # STEP 8: BUILD APP (FORCE REAL BUILD)
+      # ============================================================
+      - name: Build iOS app
+        run: |
+          cd ios || exit 1
+          
+          # Clean everything
+          rm -rf build
+          rm -rf ~/Library/Developer/Xcode/DerivedData/*
+          
+          # Build with full logging
+          echo "=== BUILDING APP ==="
+          xcodebuild -workspace "${{ steps.find_workspace.outputs.workspace }}" \
+                     -scheme "${{ steps.find_workspace.outputs.scheme }}" \
+                     -configuration Release \
+                     -derivedDataPath build \
+                     -sdk iphoneos \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     ONLY_ACTIVE_ARCH=NO \
+                     -verbose 2>&1 | tee build.log
+          
+          # Check if build succeeded
+          if [ $? -ne 0 ]; then
+            echo "❌ Build failed!"
+            echo "=== LAST 100 LINES OF BUILD LOG ==="
+            tail -100 build.log
+            exit 1
+          fi
+          
+          # Find the .app file
+          APP_PATH=$(find build -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ No .app found!"
+            echo "=== BUILD FOLDER CONTENTS ==="
+            find build -type d
+            exit 1
+          fi
+          
+          echo "✅ App built: $APP_PATH"
+          du -sh "$APP_PATH"
+          
+          cd ..
+
+      # ============================================================
+      # STEP 9: PACKAGE IPA WITH REAL APP
+      # ============================================================
+      - name: Package IPA
+        run: |
+          # Find the app
+          APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ No .app found!"
+            exit 1
+          fi
+          
+          echo "App path: $APP_PATH"
+          APP_SIZE=$(du -sh "$APP_PATH" | cut -f1)
+          echo "App size: $APP_SIZE"
+          
+          # Package
+          rm -rf Payload
+          mkdir Payload
+          cp -R "$APP_PATH" Payload/
+          zip -r gymapp2-unsigned.ipa Payload/
+          
+          # Check size
+          IPA_SIZE=$(stat -f%z "gymapp2-unsigned.ipa" 2>/dev/null || stat -c%s "gymapp2-unsigned.ipa" 2>/dev/null)
+          echo "IPA size: $IPA_SIZE bytes"
+          
+          if [ "$IPA_SIZE" -lt 1000000 ]; then
+            echo "❌ IPA is too small ($IPA_SIZE bytes)!"
+            echo "=== PAYLOAD CONTENTS ==="
+            ls -la Payload/
+            echo "=== APP CONTENTS ==="
+            ls -la Payload/*.app/
+            exit 1
+          fi
+          
+          echo "✅ IPA created: $IPA_SIZE bytes"
+
+      # ============================================================
+      # STEP 10: UPLOAD IPA
+      # ============================================================
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: gymapp2-unsigned-ipa
+          path: gymapp2-unsigned.ipa
+          compression-level: 9
+          retention-days: 30
+
+      # ============================================================
+      # STEP 11: UPLOAD BUILD LOGS (FOR DEBUGGING)
+      # ============================================================
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            ios/build.log
+            ios/build/**/*.log
+          retention-days: 7
