@@ -146,7 +146,7 @@ jobs:
           echo "✅ app.json ready"
 
       # ============================================================
-      # STEP 7: GENERATE IOS FOLDER (TRY 5 METHODS)
+      # STEP 7: GENERATE IOS FOLDER - FORCE APPROVAL
       # ============================================================
       - name: Generate iOS folder (MULTIPLE METHODS)
         run: |
@@ -156,8 +156,10 @@ jobs:
           rm -rf ios
           rm -rf node_modules/.cache
           
-          echo "=== METHOD 1: expo prebuild with YES ==="
-          echo "y" | npx expo prebuild --platform ios --clean
+          echo "=== METHOD 1: expo prebuild with YES and CI=1 ==="
+          # Force install by using CI=1 and providing 'y' to any prompts
+          CI=1 npx expo prebuild --platform ios --clean --non-interactive || echo "Method 1 failed"
+          
           if [ -d "ios" ]; then
             echo "✅ METHOD 1 SUCCESS"
             exit 0
@@ -165,8 +167,8 @@ jobs:
             echo "❌ METHOD 1 FAILED"
           fi
           
-          echo "=== METHOD 2: expo prebuild with CI=1 ==="
-          CI=1 npx expo prebuild --platform ios --clean
+          echo "=== METHOD 2: expo prebuild with YES piped ==="
+          echo "y" | npx expo prebuild --platform ios --clean
           if [ -d "ios" ]; then
             echo "✅ METHOD 2 SUCCESS"
             exit 0
@@ -174,11 +176,8 @@ jobs:
             echo "❌ METHOD 2 FAILED"
           fi
           
-          echo "=== METHOD 3: react-native init ==="
-          npx react-native init temp_ios --version 0.74.0 --skip-install
-          cp -R temp_ios/ios .
-          cp -R temp_ios/ios/* ios/ 2>/dev/null || true
-          rm -rf temp_ios
+          echo "=== METHOD 3: expo prebuild with YES YES ==="
+          printf "y\ny\ny\n" | npx expo prebuild --platform ios --clean
           if [ -d "ios" ]; then
             echo "✅ METHOD 3 SUCCESS"
             exit 0
@@ -186,7 +185,28 @@ jobs:
             echo "❌ METHOD 3 FAILED"
           fi
           
-          echo "=== METHOD 4: Manual iOS folder creation ==="
+          echo "=== METHOD 4: expo prebuild with --yes flag ==="
+          npx expo prebuild --platform ios --clean --yes 2>/dev/null || npx expo prebuild --platform ios --clean -y
+          if [ -d "ios" ]; then
+            echo "✅ METHOD 4 SUCCESS"
+            exit 0
+          else
+            echo "❌ METHOD 4 FAILED"
+          fi
+          
+          echo "=== METHOD 5: react-native init ==="
+          npx react-native init temp_ios --version 0.74.0 --skip-install
+          if [ -d "temp_ios/ios" ]; then
+            cp -R temp_ios/ios .
+            cp -R temp_ios/ios/* ios/ 2>/dev/null || true
+            rm -rf temp_ios
+            echo "✅ METHOD 5 SUCCESS"
+            exit 0
+          else
+            echo "❌ METHOD 5 FAILED"
+          fi
+          
+          echo "=== METHOD 6: Manual iOS folder creation ==="
           mkdir -p ios
           cat > ios/Podfile << 'EOF'
           platform :ios, '13.0'
@@ -200,16 +220,16 @@ jobs:
           end
           EOF
           if [ -d "ios" ]; then
-            echo "✅ METHOD 4 SUCCESS"
+            echo "✅ METHOD 6 SUCCESS"
             exit 0
           else
-            echo "❌ METHOD 4 FAILED"
+            echo "❌ METHOD 6 FAILED"
           fi
           
-          echo "=== METHOD 5: Expo run:ios ==="
+          echo "=== METHOD 7: Expo run:ios ==="
           npx expo run:ios --no-build-cache --no-install --no-dev
           if [ -d "ios" ]; then
-            echo "✅ METHOD 5 SUCCESS"
+            echo "✅ METHOD 7 SUCCESS"
             exit 0
           else
             echo "❌ ALL METHODS FAILED!"
