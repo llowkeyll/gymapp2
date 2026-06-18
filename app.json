@@ -1,18 +1,12 @@
 {
   "expo": {
-    "extra": {
-      "eas": {
-        "projectId": "59918c2b-8aec-4f48-b5f8-eec5f99b8816"
-      }
-    },
+    "name": "gymapp2",
+    "slug": "gymapp2",
+    "version": "1.0.0",
+    "platforms": ["ios", "web"],
     "ios": {
-      "bundleIdentifier": "com.llowkeyll.reactexample",
-      "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": true
-      }
-    },
-    "android": {
-      "package": "com.llowkeyll.reactexample"
+      "bundleIdentifier": "com.llowkeyll.gymapp2",
+      "supportsTablet": true
     }
   }
 }
