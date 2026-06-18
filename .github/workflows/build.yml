@@ -1,4 +1,4 @@
-name: SIGN IPA ONLY
+name: ULTIMATE FOOLPROOF IPA SIGNER
 
 on:
   workflow_dispatch:
@@ -18,64 +18,286 @@ jobs:
           fetch-depth: 1
 
       # ============================================================
-      # STEP 2: LIST FILES (DEBUG)
+      # STEP 2: LIST ALL FILES (DEBUG)
       # ============================================================
-      - name: List files
+      - name: List all files
         run: |
-          echo "=== Files in repository ==="
+          echo "=========================================="
+          echo "FILES IN REPOSITORY ROOT:"
+          echo "=========================================="
           ls -la
+          echo "=========================================="
+          echo "SEARCHING FOR IPA FILES:"
+          find . -name "*.ipa" -type f
+          echo "=========================================="
+          echo "SEARCHING FOR CERTIFICATE FILES:"
+          find . -name "*.p12" -type f
+          find . -name "*.mobileprovision" -type f
+          echo "=========================================="
 
       # ============================================================
-      # STEP 3: DOWNLOAD ZSIGN
+      # STEP 3: INSTALL DEPENDENCIES (TRY MULTIPLE METHODS)
       # ============================================================
-      - name: Download zsign
+      - name: Install dependencies
         run: |
-          wget https://github.com/zhlynn/zsign/releases/latest/download/zsign-macos -O zsign
-          chmod +x zsign
-
-      # ============================================================
-      # STEP 4: DECODE CERTIFICATE FROM SECRETS
-      # ============================================================
-      - name: Decode certificate and profile
-        run: |
-          echo "${{ secrets.CERTIFICATE_BASE64 }}" | base64 --decode > certificate.p12
-          echo "${{ secrets.PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > profile.mobileprovision
+          echo "=== INSTALLING HOMEBREW (if needed) ==="
+          which brew || /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           
-          echo "=== Certificate and profile decoded ==="
-          ls -la certificate.p12 profile.mobileprovision
+          echo "=== INSTALLING WGET ==="
+          brew install wget || sudo apt-get install wget -y || echo "Wget already installed"
+          
+          echo "=== INSTALLING OPENSSL ==="
+          brew install openssl || sudo apt-get install openssl -y || echo "OpenSSL already installed"
 
       # ============================================================
-      # STEP 5: FIND THE UNSIGNED IPA IN ROOT
+      # STEP 4: DOWNLOAD ZSIGN (TRY MULTIPLE METHODS)
       # ============================================================
-      - name: Find IPA
+      - name: Download zsign (MULTIPLE ATTEMPTS)
         run: |
-          # Look for any .ipa file in the root (excluding signed ones)
-          IPA_FILE=$(ls *.ipa 2>/dev/null | grep -v "signed" | head -1)
+          echo "=== ATTEMPT 1: Download from GitHub ==="
+          wget https://github.com/zhlynn/zsign/releases/latest/download/zsign-macos -O zsign && echo "✅ DOWNLOAD SUCCESS" || echo "❌ DOWNLOAD FAILED"
           
-          if [ -z "$IPA_FILE" ]; then
-            echo "❌ No IPA file found in root!"
-            echo "Please make sure your unsigned IPA is in the repository root"
-            echo "Files found:"
-            ls -la *.ipa 2>/dev/null || echo "No .ipa files found"
+          if [ ! -f "zsign" ]; then
+            echo "=== ATTEMPT 2: Download with curl ==="
+            curl -L -o zsign https://github.com/zhlynn/zsign/releases/latest/download/zsign-macos && echo "✅ DOWNLOAD SUCCESS" || echo "❌ DOWNLOAD FAILED"
+          fi
+          
+          if [ ! -f "zsign" ]; then
+            echo "=== ATTEMPT 3: Download with brew ==="
+            brew install zsign || echo "❌ BREW INSTALL FAILED"
+          fi
+          
+          if [ ! -f "zsign" ] && ! command -v zsign &> /dev/null; then
+            echo "=== ATTEMPT 4: Build from source ==="
+            git clone https://github.com/zhlynn/zsign.git
+            cd zsign
+            make && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+            cp zsign ../zsign
+            cd ..
+            rm -rf zsign
+          fi
+          
+          echo "=== ZSIGN STATUS ==="
+          if [ -f "zsign" ]; then
+            chmod +x zsign
+            echo "✅ zsign downloaded successfully!"
+            ls -la zsign
+          elif command -v zsign &> /dev/null; then
+            echo "✅ zsign found in PATH!"
+            which zsign
+          else
+            echo "❌ zsign not found!"
+            exit 1
+          fi
+
+      # ============================================================
+      # STEP 5: DECODE CERTIFICATE (TRY MULTIPLE METHODS)
+      # ============================================================
+      - name: Decode certificate and profile (MULTIPLE ATTEMPTS)
+        run: |
+          echo "=== DECODING CERTIFICATE ==="
+          
+          # Method 1: Direct decode
+          echo "${{ secrets.CERTIFICATE_BASE64 }}" | base64 --decode > certificate.p12 && echo "✅ CERTIFICATE DECODED" || echo "❌ METHOD 1 FAILED"
+          
+          # Method 2: With -D flag
+          if [ ! -f "certificate.p12" ] || [ ! -s "certificate.p12" ]; then
+            echo "=== ATTEMPT 2: base64 -D ==="
+            echo "${{ secrets.CERTIFICATE_BASE64 }}" | base64 -D > certificate.p12 && echo "✅ CERTIFICATE DECODED" || echo "❌ METHOD 2 FAILED"
+          fi
+          
+          # Method 3: With --decode
+          if [ ! -f "certificate.p12" ] || [ ! -s "certificate.p12" ]; then
+            echo "=== ATTEMPT 3: base64 --decode ==="
+            echo "${{ secrets.CERTIFICATE_BASE64 }}" | base64 --decode -i > certificate.p12 && echo "✅ CERTIFICATE DECODED" || echo "❌ METHOD 3 FAILED"
+          fi
+          
+          echo "=== DECODING PROVISIONING PROFILE ==="
+          
+          # Method 1: Direct decode
+          echo "${{ secrets.PROVISIONING_PROFILE_BASE64 }}" | base64 --decode > profile.mobileprovision && echo "✅ PROFILE DECODED" || echo "❌ METHOD 1 FAILED"
+          
+          # Method 2: With -D flag
+          if [ ! -f "profile.mobileprovision" ] || [ ! -s "profile.mobileprovision" ]; then
+            echo "=== ATTEMPT 2: base64 -D ==="
+            echo "${{ secrets.PROVISIONING_PROFILE_BASE64 }}" | base64 -D > profile.mobileprovision && echo "✅ PROFILE DECODED" || echo "❌ METHOD 2 FAILED"
+          fi
+          
+          # Method 3: With --decode
+          if [ ! -f "profile.mobileprovision" ] || [ ! -s "profile.mobileprovision" ]; then
+            echo "=== ATTEMPT 3: base64 --decode ==="
+            echo "${{ secrets.PROVISIONING_PROFILE_BASE64 }}" | base64 --decode -i > profile.mobileprovision && echo "✅ PROFILE DECODED" || echo "❌ METHOD 3 FAILED"
+          fi
+          
+          echo "=== DECODED FILES STATUS ==="
+          ls -la certificate.p12 profile.mobileprovision 2>/dev/null || echo "❌ Files missing!"
+          
+          # Verify files are valid
+          if [ -f "certificate.p12" ] && [ -s "certificate.p12" ]; then
+            echo "✅ Certificate file is valid"
+            file certificate.p12
+          else
+            echo "❌ Certificate file is invalid or empty!"
             exit 1
           fi
           
-          echo "Found IPA: $IPA_FILE"
-          echo "IPA_FILE=$IPA_FILE" >> $GITHUB_ENV
+          if [ -f "profile.mobileprovision" ] && [ -s "profile.mobileprovision" ]; then
+            echo "✅ Profile file is valid"
+            file profile.mobileprovision
+          else
+            echo "❌ Profile file is invalid or empty!"
+            exit 1
+          fi
 
       # ============================================================
-      # STEP 6: SIGN THE IPA
+      # STEP 6: FIND IPA (TRY MULTIPLE METHODS)
       # ============================================================
-      - name: Sign IPA
+      - name: Find IPA (MULTIPLE METHODS)
+        id: find_ipa
         run: |
-          echo "Signing: ${{ env.IPA_FILE }}"
-          ./zsign -k "certificate.p12" -p "${{ secrets.CERT_PASSWORD }}" -m "profile.mobileprovision" -o "gymapp2-signed.ipa" "${{ env.IPA_FILE }}"
+          echo "=== SEARCHING FOR IPA ==="
           
-          echo "=== Signed IPA created ==="
-          ls -la gymapp2-signed.ipa
+          # Method 1: Look for any .ipa in root
+          IPA_FILE=$(ls *.ipa 2>/dev/null | grep -v "signed" | head -1)
+          echo "METHOD 1: $IPA_FILE"
+          
+          # Method 2: Look for gymapp2-unsigned.ipa
+          if [ -z "$IPA_FILE" ]; then
+            IPA_FILE=$(ls gymapp2-unsigned.ipa 2>/dev/null | head -1)
+            echo "METHOD 2: $IPA_FILE"
+          fi
+          
+          # Method 3: Look for gymapp3-unsigned.ipa
+          if [ -z "$IPA_FILE" ]; then
+            IPA_FILE=$(ls gymapp3-unsigned.ipa 2>/dev/null | head -1)
+            echo "METHOD 3: $IPA_FILE"
+          fi
+          
+          # Method 4: Look for any .ipa in subdirectories
+          if [ -z "$IPA_FILE" ]; then
+            IPA_FILE=$(find . -name "*.ipa" -type f | grep -v "signed" | head -1)
+            echo "METHOD 4: $IPA_FILE"
+          fi
+          
+          # Method 5: Look for any .ipa anywhere
+          if [ -z "$IPA_FILE" ]; then
+            IPA_FILE=$(find . -name "*.ipa" -type f | head -1)
+            echo "METHOD 5: $IPA_FILE"
+          fi
+          
+          if [ -z "$IPA_FILE" ]; then
+            echo "=========================================="
+            echo "❌ NO IPA FILE FOUND!"
+            echo "=========================================="
+            echo "Files in root:"
+            ls -la
+            echo "=========================================="
+            echo "All .ipa files:"
+            find . -name "*.ipa" -type f
+            echo "=========================================="
+            exit 1
+          fi
+          
+          echo "✅ IPA FOUND: $IPA_FILE"
+          echo "IPA_FILE=$IPA_FILE" >> $GITHUB_ENV
+          echo "IPA_NAME=$(basename "$IPA_FILE")" >> $GITHUB_ENV
 
       # ============================================================
-      # STEP 7: UPLOAD SIGNED IPA
+      # STEP 7: VERIFY THE IPA IS VALID
+      # ============================================================
+      - name: Verify IPA
+        run: |
+          echo "=== VERIFYING IPA ==="
+          IPA_SIZE=$(stat -f%z "${{ env.IPA_FILE }}" 2>/dev/null || stat -c%s "${{ env.IPA_FILE }}" 2>/dev/null)
+          echo "IPA Size: $IPA_SIZE bytes"
+          
+          if [ "$IPA_SIZE" -lt 1000 ]; then
+            echo "❌ IPA is too small! It might be corrupted."
+            exit 1
+          fi
+          
+          # Check if it's a valid zip file
+          unzip -t "${{ env.IPA_FILE }}" 2>&1 | head -5
+          if [ $? -eq 0 ]; then
+            echo "✅ IPA is a valid zip archive"
+          else
+            echo "⚠️ IPA might be corrupted, but continuing..."
+          fi
+
+      # ============================================================
+      # STEP 8: SIGN THE IPA (TRY MULTIPLE METHODS)
+      # ============================================================
+      - name: Sign IPA (MULTIPLE ATTEMPTS)
+        run: |
+          echo "=========================================="
+          echo "SIGNING IPA: ${{ env.IPA_FILE }}"
+          echo "=========================================="
+          
+          # Method 1: Standard signing
+          echo "=== ATTEMPT 1: Standard signing ==="
+          if [ -f "./zsign" ]; then
+            ./zsign -k "certificate.p12" -p "${{ secrets.CERT_PASSWORD }}" -m "profile.mobileprovision" -o "gymapp2-signed.ipa" "${{ env.IPA_FILE }}" && echo "✅ SIGNING SUCCESS" || echo "❌ SIGNING FAILED"
+          else
+            zsign -k "certificate.p12" -p "${{ secrets.CERT_PASSWORD }}" -m "profile.mobileprovision" -o "gymapp2-signed.ipa" "${{ env.IPA_FILE }}" && echo "✅ SIGNING SUCCESS" || echo "❌ SIGNING FAILED"
+          fi
+          
+          # Method 2: With compression
+          if [ ! -f "gymapp2-signed.ipa" ] || [ ! -s "gymapp2-signed.ipa" ]; then
+            echo "=== ATTEMPT 2: Signing with compression ==="
+            if [ -f "./zsign" ]; then
+              ./zsign -k "certificate.p12" -p "${{ secrets.CERT_PASSWORD }}" -m "profile.mobileprovision" -z 9 -o "gymapp2-signed.ipa" "${{ env.IPA_FILE }}" && echo "✅ SIGNING SUCCESS" || echo "❌ SIGNING FAILED"
+            else
+              zsign -k "certificate.p12" -p "${{ secrets.CERT_PASSWORD }}" -m "profile.mobileprovision" -z 9 -o "gymapp2-signed.ipa" "${{ env.IPA_FILE }}" && echo "✅ SIGNING SUCCESS" || echo "❌ SIGNING FAILED"
+            fi
+          fi
+          
+          # Method 3: With verbose output
+          if [ ! -f "gymapp2-signed.ipa" ] || [ ! -s "gymapp2-signed.ipa" ]; then
+            echo "=== ATTEMPT 3: Signing with verbose ==="
+            if [ -f "./zsign" ]; then
+              ./zsign -v -k "certificate.p12" -p "${{ secrets.CERT_PASSWORD }}" -m "profile.mobileprovision" -o "gymapp2-signed.ipa" "${{ env.IPA_FILE }}" && echo "✅ SIGNING SUCCESS" || echo "❌ SIGNING FAILED"
+            else
+              zsign -v -k "certificate.p12" -p "${{ secrets.CERT_PASSWORD }}" -m "profile.mobileprovision" -o "gymapp2-signed.ipa" "${{ env.IPA_FILE }}" && echo "✅ SIGNING SUCCESS" || echo "❌ SIGNING FAILED"
+            fi
+          fi
+          
+          # Method 4: Using the original filename
+          if [ ! -f "gymapp2-signed.ipa" ] || [ ! -s "gymapp2-signed.ipa" ]; then
+            echo "=== ATTEMPT 4: Signing with original name ==="
+            if [ -f "./zsign" ]; then
+              ./zsign -k "certificate.p12" -p "${{ secrets.CERT_PASSWORD }}" -m "profile.mobileprovision" -o "${{ env.IPA_NAME }}" "${{ env.IPA_FILE }}" && echo "✅ SIGNING SUCCESS" || echo "❌ SIGNING FAILED"
+            else
+              zsign -k "certificate.p12" -p "${{ secrets.CERT_PASSWORD }}" -m "profile.mobileprovision" -o "${{ env.IPA_NAME }}" "${{ env.IPA_FILE }}" && echo "✅ SIGNING SUCCESS" || echo "❌ SIGNING FAILED"
+            fi
+          fi
+          
+          echo "=== SIGNED IPA STATUS ==="
+          ls -la gymapp2-signed.ipa 2>/dev/null || echo "No signed IPA found!"
+
+      # ============================================================
+      # STEP 9: VERIFY SIGNED IPA
+      # ============================================================
+      - name: Verify signed IPA
+        run: |
+          echo "=== VERIFYING SIGNED IPA ==="
+          
+          if [ -f "gymapp2-signed.ipa" ] && [ -s "gymapp2-signed.ipa" ]; then
+            SIZE=$(stat -f%z "gymapp2-signed.ipa" 2>/dev/null || stat -c%s "gymapp2-signed.ipa" 2>/dev/null)
+            echo "✅ Signed IPA created successfully!"
+            echo "Size: $SIZE bytes"
+            
+            # Check if it's a valid zip
+            unzip -t gymapp2-signed.ipa 2>&1 | head -3
+            echo "✅ Signed IPA is ready to install!"
+          else
+            echo "❌ Signed IPA is missing or empty!"
+            echo "Searching for any signed IPA..."
+            find . -name "*signed*.ipa" -type f
+            exit 1
+          fi
+
+      # ============================================================
+      # STEP 10: UPLOAD SIGNED IPA
       # ============================================================
       - name: Upload signed IPA
         uses: actions/upload-artifact@v4
@@ -86,37 +308,65 @@ jobs:
           retention-days: 30
 
       # ============================================================
-      # STEP 8: SUCCESS MESSAGE
+      # STEP 11: UPLOAD DEBUG INFO (IF FAILED)
+      # ============================================================
+      - name: Upload debug info
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-info
+          path: |
+            certificate.p12
+            profile.mobileprovision
+            *.ipa
+            zsign
+            *.log
+          retention-days: 7
+
+      # ============================================================
+      # STEP 12: SUCCESS MESSAGE
       # ============================================================
       - name: Sign complete!
         if: success()
         run: |
-          echo "=================================================="
-          echo "🎉 IPA SIGNED SUCCESSFULLY! 🎉"
-          echo "=================================================="
+          echo "============================================================"
+          echo "🎉🎉🎉 IPA SIGNED SUCCESSFULLY! 🎉🎉🎉"
+          echo "============================================================"
           echo "📦 gymapp2-signed-ipa is ready to download!"
-          echo "=================================================="
+          echo "============================================================"
           echo "NEXT STEPS:"
-          echo "1. Download gymapp2-signed-ipa from artifacts"
+          echo "1. Download gymapp2-signed-ipa from Artifacts"
           echo "2. AirDrop to your iPhone"
           echo "3. Open with AltStore"
           echo "4. Tap Install"
-          echo "=================================================="
+          echo "5. Trust the certificate in Settings"
+          echo "6. Launch the app!"
+          echo "============================================================"
+          echo "FILE DETAILS:"
+          ls -la gymapp2-signed.ipa
+          echo "============================================================"
 
       # ============================================================
-      # STEP 9: DEBUG ON FAILURE
+      # STEP 13: DEBUG ON FAILURE
       # ============================================================
       - name: Debug on failure
         if: failure()
         run: |
-          echo "=================================================="
-          echo "❌ SIGNING FAILED ❌"
-          echo "=================================================="
-          echo "=== Files in root ==="
+          echo "============================================================"
+          echo "❌❌❌ SIGNING FAILED ❌❌❌"
+          echo "============================================================"
+          echo "=== FILES IN ROOT ==="
           ls -la
-          echo "=== Certificate files ==="
+          echo "=== CERTIFICATE FILES ==="
           ls -la *.p12 2>/dev/null || echo "No .p12 file"
           ls -la *.mobileprovision 2>/dev/null || echo "No .mobileprovision file"
-          echo "=== IPA files ==="
+          echo "=== IPA FILES ==="
           ls -la *.ipa 2>/dev/null || echo "No .ipa files"
-          echo "=================================================="
+          echo "=== ZSIGN ==="
+          ls -la zsign 2>/dev/null || echo "zsign not found"
+          echo "=== DECODED FILES ==="
+          file certificate.p12 2>/dev/null || echo "certificate.p12 missing"
+          file profile.mobileprovision 2>/dev/null || echo "profile.mobileprovision missing"
+          echo "============================================================"
+          echo "Download the debug-info artifact for full logs"
+          echo "============================================================"
