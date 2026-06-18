@@ -1,4 +1,4 @@
-name: BUILD IPA - EXPO FIX
+name: ULTIMATE FOOLPROOF IPA BUILDER
 
 on:
   push:
@@ -10,30 +10,60 @@ jobs:
     runs-on: macos-latest
     
     steps:
-      # ============================================
-      # CHECKOUT
-      # ============================================
+      # ============================================================
+      # STEP 1: CHECKOUT
+      # ============================================================
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           submodules: false
           fetch-depth: 1
 
-      # ============================================
-      # SETUP NODE 20
-      # ============================================
+      # ============================================================
+      # STEP 2: SETUP NODE 20
+      # ============================================================
       - name: Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      # ============================================
-      # FIX APP.JSON
-      # ============================================
-      - name: Fix app.json
+      # ============================================================
+      # STEP 3: INSTALL DEPENDENCIES (TRY 4 METHODS)
+      # ============================================================
+      - name: Install dependencies (MULTIPLE ATTEMPTS)
         run: |
-          cat > app.json << 'EOF'
+          echo "ATTEMPT 1: npm install --force"
+          npm install --force && echo "✅ INSTALL SUCCESS" || echo "❌ INSTALL FAILED"
+          
+          if [ $? -ne 0 ]; then
+            echo "ATTEMPT 2: npm install --legacy-peer-deps"
+            npm install --legacy-peer-deps && echo "✅ INSTALL SUCCESS" || echo "❌ INSTALL FAILED"
+          fi
+          
+          if [ $? -ne 0 ]; then
+            echo "ATTEMPT 3: npm cache clean && npm install"
+            npm cache clean --force
+            npm install && echo "✅ INSTALL SUCCESS" || echo "❌ INSTALL FAILED"
+          fi
+          
+          if [ $? -ne 0 ]; then
+            echo "ATTEMPT 4: npm ci --force"
+            npm ci --force && echo "✅ INSTALL SUCCESS" || echo "❌ INSTALL FAILED"
+          fi
+          
+          echo "FINAL CHECK:"
+          npm list --depth=0 || echo "⚠️ Some dependencies missing but continuing"
+
+      # ============================================================
+      # STEP 4: CREATE/FIX APP.JSON
+      # ============================================================
+      - name: Create/fix app.json
+        run: |
+          echo "=== CHECKING app.json ==="
+          if [ ! -f "app.json" ]; then
+            echo "Creating app.json..."
+            cat > app.json << 'EOF'
           {
             "expo": {
               "name": "gymapp2",
@@ -47,20 +77,31 @@ jobs:
             }
           }
           EOF
+          else
+            echo "app.json exists, fixing..."
+            cat > app.json << 'EOF'
+          {
+            "expo": {
+              "name": "gymapp2",
+              "slug": "gymapp2",
+              "version": "1.0.0",
+              "platforms": ["ios", "web"],
+              "ios": {
+                "bundleIdentifier": "com.yourcompany.gymapp2",
+                "supportsTablet": true
+              }
+            }
+          }
+          EOF
+          fi
+          
+          echo "✅ app.json ready:"
           cat app.json
 
-      # ============================================
-      # INSTALL DEPENDENCIES
-      # ============================================
-      - name: Install dependencies
-        run: |
-          export CI=1
-          npm install --force
-
-      # ============================================
-      # GENERATE IOS FOLDER
-      # ============================================
-      - name: Generate iOS folder
+      # ============================================================
+      # STEP 5: GENERATE IOS FOLDER (TRY 4 METHODS)
+      # ============================================================
+      - name: Generate iOS folder (MULTIPLE METHODS)
         run: |
           export CI=1
           export EXPO_NO_INTERACTIVE=1
@@ -68,117 +109,220 @@ jobs:
           rm -rf ios
           rm -rf node_modules/.cache
           
-          echo "y" | npx expo prebuild --platform ios --clean || echo "Prebuild failed"
+          echo "=== METHOD 1: expo prebuild with YES ==="
+          echo "y" | npx expo prebuild --platform ios --clean && echo "✅ METHOD 1 SUCCESS" || echo "❌ METHOD 1 FAILED"
           
           if [ ! -d "ios" ]; then
-            echo "Creating iOS folder manually..."
+            echo "=== METHOD 2: expo prebuild with CI=1 ==="
+            CI=1 npx expo prebuild --platform ios --clean && echo "✅ METHOD 2 SUCCESS" || echo "❌ METHOD 2 FAILED"
+          fi
+          
+          if [ ! -d "ios" ]; then
+            echo "=== METHOD 3: react-native init ==="
+            npx react-native init temp_ios --version 0.74.0 --skip-install
+            cp -R temp_ios/ios .
+            cp -R temp_ios/ios/* ios/ 2>/dev/null || true
+            rm -rf temp_ios
+            echo "✅ METHOD 3 ATTEMPTED"
+          fi
+          
+          if [ ! -d "ios" ]; then
+            echo "=== METHOD 4: Manual iOS folder creation ==="
             mkdir -p ios
+            echo "platform :ios, '13.0'" > ios/Podfile
+            echo "require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'" >> ios/Podfile
+            echo "target 'gymapp2' do" >> ios/Podfile
+            echo "  config = use_native_modules!" >> ios/Podfile
+            echo "  use_react_native!(:path => config['reactNativePath'])" >> ios/Podfile
+            echo "end" >> ios/Podfile
+            echo "✅ METHOD 4 ATTEMPTED"
+          fi
+          
+          echo "=== IOS FOLDER STATUS ==="
+          if [ -d "ios" ]; then
+            echo "✅ iOS folder exists!"
+            ls -la ios/
+          else
+            echo "❌ iOS folder missing!"
+            exit 1
           fi
 
-      # ============================================
-      # FIX EXPO MODULES JSI ERROR - CREATE PODFILE
-      # ============================================
-      - name: Create fixed Podfile
+      # ============================================================
+      # STEP 6: FIX PODFILE IF NEEDED
+      # ============================================================
+      - name: Fix Podfile if needed
         run: |
           cd ios || exit 1
           
-          rm -rf Pods
-          rm -f Podfile.lock
+          if [ ! -f "Podfile" ]; then
+            echo "Creating Podfile..."
+            echo "platform :ios, '13.0'" > Podfile
+            echo "require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'" >> Podfile
+            echo "target 'gymapp2' do" >> Podfile
+            echo "  config = use_native_modules!" >> Podfile
+            echo "  use_react_native!(:path => config['reactNativePath'])" >> Podfile
+            echo "end" >> Podfile
+          else
+            echo "Podfile exists, checking contents..."
+            cat Podfile | head -20
+          fi
           
-          # Write Podfile using echo commands instead of heredoc
-          echo 'require File.join(File.dirname(`node --print "require.resolve('\''expo/package.json'\'')"`), "scripts/autolinking")' > Podfile
-          echo 'require File.join(File.dirname(`node --print "require.resolve('\''react-native/package.json'\'')"`), "scripts/react_native_pods")' >> Podfile
-          echo 'require File.join(File.dirname(`node --print "require.resolve('\''@react-native-community/cli-platform-ios/package.json'\'')"`), "native_modules")' >> Podfile
-          echo '' >> Podfile
-          echo "platform :ios, '13.0'" >> Podfile
-          echo "install! 'cocoapods', :deterministic_uuids => false" >> Podfile
-          echo '' >> Podfile
-          echo "target 'gymapp2' do" >> Podfile
-          echo "  use_expo_modules!" >> Podfile
-          echo "  config = use_native_modules!" >> Podfile
-          echo '' >> Podfile
-          echo "  use_react_native!(" >> Podfile
-          echo "    :path => config[:reactNativePath]," >> Podfile
-          echo "    :hermes_enabled => true," >> Podfile
-          echo "    :fabric_enabled => false," >> Podfile
-          echo "    :flipper_configuration => FlipperConfiguration.enabled(false)" >> Podfile
-          echo "  )" >> Podfile
-          echo '' >> Podfile
-          echo "  post_install do |installer|" >> Podfile
-          echo "    react_native_post_install(installer)" >> Podfile
-          echo '    installer.pods_project.targets.each do |target|' >> Podfile
-          echo "      if target.name == 'ExpoModulesJSI'" >> Podfile
-          echo "        target.build_configurations.each do |config|" >> Podfile
-          echo "          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] ||= ['$(inherited)']" >> Podfile
-          echo "          config.build_settings['GCC_PREPROCESSOR_DEFINITIONS'] << 'EXPO_MODULES_JSI_FIX=1'" >> Podfile
-          echo "        end" >> Podfile
-          echo "      end" >> Podfile
-          echo "    end" >> Podfile
-          echo "  end" >> Podfile
-          echo "end" >> Podfile
-          
-          cat Podfile
           cd ..
 
-      # ============================================
-      # INSTALL PODS WITH FIX
-      # ============================================
-      - name: Install Pods
+      # ============================================================
+      # STEP 7: INSTALL PODS (TRY 3 METHODS)
+      # ============================================================
+      - name: Install Pods (MULTIPLE ATTEMPTS)
         run: |
           sudo gem install cocoapods
           cd ios || exit 1
-          pod install --repo-update || pod install --verbose
+          
+          echo "=== POD INSTALL ATTEMPT 1: pod install ==="
+          pod install && echo "✅ PODS SUCCESS" || echo "❌ PODS FAILED"
+          
+          if [ $? -ne 0 ]; then
+            echo "=== POD INSTALL ATTEMPT 2: pod install --repo-update ==="
+            pod install --repo-update && echo "✅ PODS SUCCESS" || echo "❌ PODS FAILED"
+          fi
+          
+          if [ $? -ne 0 ]; then
+            echo "=== POD INSTALL ATTEMPT 3: pod install --verbose ==="
+            pod install --verbose && echo "✅ PODS SUCCESS" || echo "❌ PODS FAILED"
+          fi
+          
+          if [ $? -ne 0 ]; then
+            echo "=== POD INSTALL ATTEMPT 4: pod cache clean --all && pod install ==="
+            pod cache clean --all
+            pod install && echo "✅ PODS SUCCESS" || echo "❌ PODS FAILED"
+          fi
+          
+          echo "=== PODS STATUS ==="
+          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+            echo "✅ Pods installed successfully!"
+          else
+            echo "❌ Pods may not be installed correctly"
+          fi
+          
           cd ..
 
-      # ============================================
-      # BUILD IOS APP
-      # ============================================
-      - name: Build iOS app
+      # ============================================================
+      # STEP 8: FIND WORKSPACE OR PROJECT
+      # ============================================================
+      - name: Find workspace/project
+        id: find_workspace
         run: |
           cd ios || exit 1
           
           WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -type d | head -1)
+          PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -type d | head -1)
           
           if [ -n "$WORKSPACE" ]; then
             SCHEME=$(basename "$WORKSPACE" .xcworkspace)
-            echo "Building workspace: $WORKSPACE with scheme: $SCHEME"
-            
-            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO GCC_PREPROCESSOR_DEFINITIONS='$(inherited) EXPO_MODULES_JSI_FIX=1'
+            echo "FOUND_WORKSPACE=$WORKSPACE" >> $GITHUB_ENV
+            echo "FOUND_SCHEME=$SCHEME" >> $GITHUB_ENV
+            echo "BUILD_TYPE=workspace" >> $GITHUB_ENV
+            echo "✅ Found workspace: $WORKSPACE with scheme: $SCHEME"
+          elif [ -n "$PROJECT" ]; then
+            SCHEME=$(basename "$PROJECT" .xcodeproj)
+            echo "FOUND_PROJECT=$PROJECT" >> $GITHUB_ENV
+            echo "FOUND_SCHEME=$SCHEME" >> $GITHUB_ENV
+            echo "BUILD_TYPE=project" >> $GITHUB_ENV
+            echo "✅ Found project: $PROJECT with scheme: $SCHEME"
           else
-            echo "No workspace found!"
+            echo "❌ No iOS project found!"
             ls -la
             exit 1
           fi
           
           cd ..
 
-      # ============================================
-      # PACKAGE IPA
-      # ============================================
-      - name: Package IPA
+      # ============================================================
+      # STEP 9: BUILD APP (TRY 3 METHODS)
+      # ============================================================
+      - name: Build iOS app (MULTIPLE ATTEMPTS)
         run: |
+          cd ios || exit 1
+          
+          rm -rf build
+          
+          if [ "$BUILD_TYPE" = "workspace" ]; then
+            echo "=== BUILD ATTEMPT 1: xcodebuild with workspace ==="
+            xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+          else
+            echo "=== BUILD ATTEMPT 1: xcodebuild with project ==="
+            xcodebuild -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+          fi
+          
+          if [ $? -ne 0 ]; then
+            echo "=== BUILD ATTEMPT 2: xcodebuild with clean ==="
+            xcodebuild clean -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" || xcodebuild clean -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME"
+            if [ "$BUILD_TYPE" = "workspace" ]; then
+              xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+            else
+              xcodebuild -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+            fi
+          fi
+          
+          if [ $? -ne 0 ]; then
+            echo "=== BUILD ATTEMPT 3: xcodebuild with additional flags ==="
+            if [ "$BUILD_TYPE" = "workspace" ]; then
+              xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO OTHER_SWIFT_FLAGS="-DDEBUG" ONLY_ACTIVE_ARCH=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+            else
+              xcodebuild -project "$FOUND_PROJECT" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO OTHER_SWIFT_FLAGS="-DDEBUG" ONLY_ACTIVE_ARCH=NO && echo "✅ BUILD SUCCESS" || echo "❌ BUILD FAILED"
+            fi
+          fi
+          
+          cd ..
+
+      # ============================================================
+      # STEP 10: FIND .APP (SEARCH EVERYWHERE)
+      # ============================================================
+      - name: Find .app file
+        id: find_app
+        run: |
+          echo "=== SEARCHING FOR .APP FILE ==="
+          
           APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
           
           if [ -z "$APP_PATH" ]; then
-            APP_PATH=$(find . -name "*.app" -type d | grep -v "Pods" | head -1)
+            APP_PATH=$(find . -maxdepth 3 -name "*.app" -type d | grep -v "Pods" | head -1)
           fi
           
           if [ -z "$APP_PATH" ]; then
-            echo "No .app found!"
+            APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "*.app" -type d 2>/dev/null | head -1)
+          fi
+          
+          if [ -z "$APP_PATH" ]; then
+            APP_PATH=$(find . -name "*.app" -type d | head -1)
+          fi
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "❌ No .app found anywhere!"
+            echo "=== SEARCH RESULTS ==="
             find . -name "*.app" -type d
             exit 1
           fi
           
-          echo "Found app at: $APP_PATH"
+          echo "✅ Found app at: $APP_PATH"
+          echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
+
+      # ============================================================
+      # STEP 11: CREATE IPA
+      # ============================================================
+      - name: Create IPA
+        run: |
+          echo "=== PACKAGING IPA ==="
+          rm -rf Payload
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           zip -r gymapp2-unsigned.ipa Payload/
-          echo "IPA created!"
+          echo "✅ IPA created successfully!"
+          ls -la gymapp2-unsigned.ipa
 
-      # ============================================
-      # UPLOAD IPA
-      # ============================================
-      - name: Upload IPA
+      # ============================================================
+      # STEP 12: UPLOAD IPA
+      # ============================================================
+      - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
           name: gymapp2-unsigned-ipa
@@ -186,18 +330,63 @@ jobs:
           compression-level: 9
           retention-days: 30
 
-      # ============================================
-      # DEBUG ON FAILURE
-      # ============================================
+      # ============================================================
+      # STEP 13: SUCCESS MESSAGE
+      # ============================================================
+      - name: Build complete!
+        if: success()
+        run: |
+          echo "=================================================="
+          echo "🎉🎉🎉 BUILD SUCCESSFUL! 🎉🎉🎉"
+          echo "=================================================="
+          echo "📦 IPA file: gymapp2-unsigned.ipa"
+          echo "📥 Download it from the Artifacts section"
+          echo "=================================================="
+          echo "NEXT STEPS:"
+          echo "1. Download gymapp2-unsigned.ipa"
+          echo "2. Sign with zsign on Windows:"
+          echo "   zsign -k certificate.p12 -p password -m profile.mobileprovision -o gymapp2-signed.ipa gymapp2-unsigned.ipa"
+          echo "3. Install with AltStore"
+          echo "=================================================="
+
+      # ============================================================
+      # STEP 14: DEBUG ON FAILURE
+      # ============================================================
       - name: Debug on failure
         if: failure()
         run: |
-          echo "=== Debug Information ==="
+          echo "=================================================="
+          echo "❌❌❌ BUILD FAILED ❌❌❌"
+          echo "=================================================="
+          echo "=== DEBUG INFO ==="
           echo "Directory structure:"
-          ls -laR
+          ls -laR | head -100
           echo "=== app.json ==="
           cat app.json 2>/dev/null || echo "No app.json"
           echo "=== iOS folder ==="
           ls -la ios/ 2>/dev/null || echo "No ios folder"
           echo "=== Podfile ==="
           cat ios/Podfile 2>/dev/null || echo "No Podfile"
+          echo "=== Build logs ==="
+          find ios/build -name "*.log" -type f 2>/dev/null | head -5
+          echo "=================================================="
+          echo "Download the debug-info artifact for full logs"
+          echo "=================================================="
+
+      # ============================================================
+      # STEP 15: UPLOAD DEBUG INFO ON FAILURE
+      # ============================================================
+      - name: Upload debug info
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-info
+          path: |
+            ios/build/Logs/
+            ios/build/**/*.log
+            ios/Podfile.lock
+            ios/Pods/
+            package.json
+            app.json
+            npm-debug.log
+          retention-days: 7
