@@ -1,4 +1,4 @@
-name: INDESTRUCTIBLE IPA BUILDER - FULLY FIXED
+name: INDESTRUCTIBLE IPA BUILDER - SIMPLIFIED PODFILE
 
 on:
   push:
@@ -168,9 +168,6 @@ jobs:
           rm -rf ios
           rm -rf node_modules/.cache
           
-          # ==========================================================
-          # METHOD 1: Expo prebuild with YES pipe
-          # ==========================================================
           echo "=== METHOD 1: expo prebuild with YES pipe ==="
           echo "y" | npx expo prebuild --platform ios --clean 2>&1 | tee prebuild_log.txt
           if [ -d "ios" ]; then
@@ -181,9 +178,6 @@ jobs:
             echo "❌ METHOD 1 FAILED"
           fi
           
-          # ==========================================================
-          # METHOD 2: Expo prebuild with CI=1
-          # ==========================================================
           echo "=== METHOD 2: expo prebuild with CI=1 ==="
           CI=1 npx expo prebuild --platform ios --clean 2>&1 | tee -a prebuild_log.txt
           if [ -d "ios" ]; then
@@ -194,9 +188,6 @@ jobs:
             echo "❌ METHOD 2 FAILED"
           fi
           
-          # ==========================================================
-          # METHOD 3: React Native init
-          # ==========================================================
           echo "=== METHOD 3: react-native init (BYPASS) ==="
           npx react-native init temp_ios --version 0.74.0 --skip-install
           if [ -d "temp_ios/ios" ]; then
@@ -210,9 +201,6 @@ jobs:
             echo "❌ METHOD 3 FAILED"
           fi
           
-          # ==========================================================
-          # METHOD 4: Manual iOS folder creation
-          # ==========================================================
           echo "=== METHOD 4: Manual iOS folder creation ==="
           mkdir -p ios
           cat > ios/Podfile << 'EOF'
@@ -285,9 +273,6 @@ jobs:
             echo "❌ METHOD 4 FAILED"
           fi
           
-          # ==========================================================
-          # METHOD 5: Expo run:ios
-          # ==========================================================
           echo "=== METHOD 5: Expo run:ios ==="
           npx expo run:ios --no-build-cache --no-install --no-dev
           if [ -d "ios" ]; then
@@ -300,32 +285,44 @@ jobs:
           fi
 
       # ============================================================
-      # STEP 9: FIX PODFILE (WITHOUT BACKTICKS)
+      # STEP 9: FIX PODFILE (SIMPLIFIED - NO BACKTICKS)
       # ============================================================
-      - name: Fix Podfile
+      - name: Fix Podfile (SIMPLIFIED)
         run: |
           echo "=========================================="
-          echo "FIXING PODFILE - NO BACKTICKS"
+          echo "FIXING PODFILE - SIMPLIFIED VERSION"
           echo "=========================================="
           cd ios || exit 1
           
-          # Use a simple, stable Podfile without backticks
           cat > Podfile << 'EOF'
           platform :ios, '13.0'
-          require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
-
+          
           $RCT_NEW_ARCH_ENABLED = 0
-
+          
           target 'gymapp2' do
-            use_react_native!(:path => '../node_modules/react-native')
+            pod 'React', :path => '../node_modules/react-native'
+            pod 'React-Core', :path => '../node_modules/react-native/React'
+            pod 'React-RCTImage', :path => '../node_modules/react-native/Libraries/Image'
+            pod 'React-RCTNetwork', :path => '../node_modules/react-native/Libraries/Network'
+            pod 'React-RCTVibration', :path => '../node_modules/react-native/Libraries/Vibration'
+            pod 'React-RCTWebSocket', :path => '../node_modules/react-native/Libraries/WebSocket'
+            pod 'React-cxxreact', :path => '../node_modules/react-native/ReactCommon/cxxreact'
+            pod 'React-jsi', :path => '../node_modules/react-native/ReactCommon/jsi'
+            pod 'ExpoModulesCore', :path => '../node_modules/expo-modules-core'
             
             post_install do |installer|
-              react_native_post_install(installer)
+              installer.pods_project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+                  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                end
+              end
             end
           end
           EOF
           
-          echo "✅ Podfile created"
+          echo "✅ Simplified Podfile created"
           cat Podfile
           cd ..
 
