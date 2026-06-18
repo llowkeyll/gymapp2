@@ -33,45 +33,39 @@ jobs:
       # ============================================
       - name: Fix app.json to include iOS
         run: |
-          # Check if app.json exists
           if [ -f "app.json" ]; then
             echo "Fixing app.json..."
-            # Add iOS to platforms using sed
-            sed -i '' 's/"platforms": \[[^]]*\]/"platforms": ["ios", "web"]/g' app.json
-            # If that fails, try a different approach
-            if [ $? -ne 0 ]; then
-              echo "Manual app.json fix..."
-              cat > app.json << 'EOF'
-{
-  "expo": {
-    "name": "gymapp2",
-    "slug": "gymapp2",
-    "version": "1.0.0",
-    "platforms": ["ios", "web"],
-    "ios": {
-      "bundleIdentifier": "com.yourcompany.gymapp2",
-      "supportsTablet": true
-    }
-  }
-}
-EOF
-            fi
+            # Create a new app.json with proper iOS config
+            cat > app.json << 'EOF'
+          {
+            "expo": {
+              "name": "gymapp2",
+              "slug": "gymapp2",
+              "version": "1.0.0",
+              "platforms": ["ios", "web"],
+              "ios": {
+                "bundleIdentifier": "com.yourcompany.gymapp2",
+                "supportsTablet": true
+              }
+            }
+          }
+          EOF
           else
             echo "Creating app.json..."
             cat > app.json << 'EOF'
-{
-  "expo": {
-    "name": "gymapp2",
-    "slug": "gymapp2",
-    "version": "1.0.0",
-    "platforms": ["ios", "web"],
-    "ios": {
-      "bundleIdentifier": "com.yourcompany.gymapp2",
-      "supportsTablet": true
-    }
-  }
-}
-EOF
+          {
+            "expo": {
+              "name": "gymapp2",
+              "slug": "gymapp2",
+              "version": "1.0.0",
+              "platforms": ["ios", "web"],
+              "ios": {
+                "bundleIdentifier": "com.yourcompany.gymapp2",
+                "supportsTablet": true
+              }
+            }
+          }
+          EOF
           fi
           
           echo "app.json contents:"
@@ -82,7 +76,6 @@ EOF
       # ============================================
       - name: Install dependencies
         run: |
-          # Use CI environment to avoid interactive prompts
           export CI=1
           npm install --force
 
@@ -94,14 +87,11 @@ EOF
           export CI=1
           export EXPO_NO_INTERACTIVE=1
           
-          # Remove old ios folder
           rm -rf ios
           rm -rf node_modules/.cache
           
-          # Method 1: Expo prebuild with YES flag
           echo "y" | npx expo prebuild --platform ios --clean || echo "Prebuild failed, continuing..."
           
-          # Method 2: If prebuild failed, use react-native init
           if [ ! -d "ios" ]; then
             echo "Expo prebuild failed, using React Native init..."
             npx react-native init temp_ios --version 0.85.3 --skip-install
@@ -110,23 +100,22 @@ EOF
             rm -rf temp_ios
           fi
           
-          # Method 3: Manual creation if all else fails
           if [ ! -d "ios" ]; then
             echo "Creating manual iOS folder..."
             mkdir -p ios
             cat > ios/Podfile << 'EOF'
-platform :ios, '13.0'
-require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
-
-target 'gymapp2' do
-  config = use_native_modules!
-  use_react_native!(:path => config["reactNativePath"])
-  
-  post_install do |installer|
-    react_native_post_install(installer)
-  end
-end
-EOF
+          platform :ios, '13.0'
+          require_relative '../node_modules/@react-native-community/cli-platform-ios/native_modules'
+          
+          target 'gymapp2' do
+            config = use_native_modules!
+            use_react_native!(:path => config["reactNativePath"])
+            
+            post_install do |installer|
+              react_native_post_install(installer)
+            end
+          end
+          EOF
           fi
 
       # ============================================
@@ -135,10 +124,10 @@ EOF
       - name: Verify iOS folder
         run: |
           if [ -d "ios" ]; then
-            echo "✅ iOS folder exists!"
+            echo "iOS folder exists!"
             ls -la ios/
           else
-            echo "❌ iOS folder missing!"
+            echo "iOS folder missing!"
             exit 1
           fi
 
@@ -160,7 +149,6 @@ EOF
         run: |
           cd ios || exit 1
           
-          # Find workspace
           WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -type d | head -1)
           PROJECT=$(find . -maxdepth 1 -name "*.xcodeproj" -type d | head -1)
           
