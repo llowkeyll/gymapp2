@@ -1,4 +1,4 @@
-name: Build iOS IPA
+name: Build iOS IPA (React Native)
 
 on:
   push:
@@ -9,26 +9,83 @@ jobs:
   build:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v3
-      
-      - name: Setup Xcode
-        run: sudo xcode-select -switch /Applications/Xcode.app
-      
-      - name: Build React Native iOS App
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Dependencies
         run: |
-          npx react-native bundle --entry-file index.js --bundle-output ios/main.jsbundle --platform ios --dev false
+          npm ci || npm install
+          # Install React Native CLI if missing
+          if ! grep -q "@react-native-community/cli" package.json; then
+            npm install --save-dev @react-native-community/cli
+          fi
+
+      - name: Bundle JavaScript
+        run: |
+          # Try local CLI first
+          if [ -f "node_modules/.bin/react-native" ]; then
+            node_modules/.bin/react-native bundle --entry-file index.js --bundle-output ios/main.jsbundle --platform ios --dev false
+          else
+            npx @react-native-community/cli bundle --entry-file index.js --bundle-output ios/main.jsbundle --platform ios --dev false
+          fi
+
+      - name: Install iOS Pods
+        run: |
           cd ios
-          pod install
-          xcodebuild -workspace YourProjectName.xcworkspace -scheme YourSchemeName -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO
-      
-      - name: Create IPA
+          pod install --repo-update || pod install
+          cd ..
+
+      - name: Build iOS App
         run: |
-          mkdir Payload
-          cp -R build/Build/Products/Release-iphoneos/YourApp.app Payload/
+          cd ios
+          # Auto-detect workspace or project
+          WORKSPACE=$(ls *.xcworkspace 2>/dev/null | head -1)
+          PROJECT=$(ls *.xcodeproj 2>/dev/null | head -1)
+          
+          if [ -n "$WORKSPACE" ]; then
+            SCHEME="${WORKSPACE%.xcworkspace}"
+            echo "Building workspace: $WORKSPACE with scheme: $SCHEME"
+            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO
+          elif [ -n "$PROJECT" ]; then
+            SCHEME="${PROJECT%.xcodeproj}"
+            echo "Building project: $PROJECT with scheme: $SCHEME"
+            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO
+          else
+            echo "No iOS project found!"
+            ls -la
+            exit 1
+          fi
+          cd ..
+
+      - name: Locate and Package App
+        run: |
+          # Find the built .app
+          APP_PATH=$(find ios/build -name "*.app" -type d | head -1)
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found in ios/build!"
+            find ios -name "*.app" -type d
+            exit 1
+          fi
+          echo "App found at: $APP_PATH"
+          
+          mkdir -p Payload
+          cp -R "$APP_PATH" Payload/
+          
+          # Create IPA
           zip -r YourApp.ipa Payload/
-      
-      - name: Upload IPA
+
+      - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: YourApp
+          name: YourApp-IPA
           path: YourApp.ipa
+          compression-level: 9
+          retention-days: 7
