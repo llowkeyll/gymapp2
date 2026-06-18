@@ -18,8 +18,11 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Expo Prebuild
-        run: npx expo prebuild -p ios --clean
+      - name: Expo Prebuild (Generates iOS Native Code)
+        run: npx expo prebuild -p ios --clean --no-install
+
+      - name: Install Updated Dependencies
+        run: npm install
 
       - name: Build Unsigned IPA
         run: |
