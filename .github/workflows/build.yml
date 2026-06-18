@@ -14,9 +14,12 @@ jobs:
       - name: Setup Xcode
         run: sudo xcode-select -switch /Applications/Xcode.app
       
-      - name: Build iOS App
+      - name: Build React Native iOS App
         run: |
-          xcodebuild -workspace YourApp.xcworkspace -scheme YourApp -configuration Release -derivedDataPath build -sdk iphoneos
+          npx react-native bundle --entry-file index.js --bundle-output ios/main.jsbundle --platform ios --dev false
+          cd ios
+          pod install
+          xcodebuild -workspace YourProjectName.xcworkspace -scheme YourSchemeName -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO
       
       - name: Create IPA
         run: |
