@@ -1,4 +1,4 @@
-name: INDESTRUCTIBLE IPA BUILDER - SIMPLIFIED PODFILE
+name: ULTIMATE FOOLPROOF IPA BUILDER - FULL SYSTEM CHECK
 
 on:
   push:
@@ -24,20 +24,23 @@ jobs:
       # ============================================================
       - name: List all files
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "ALL FILES IN REPOSITORY:"
-          echo "=========================================="
+          echo "============================================================"
           ls -la
-          echo "=========================================="
+          echo "============================================================"
           echo "FILE COUNT:"
           find . -type f | wc -l
-          echo "=========================================="
+          echo "============================================================"
           echo "CERTIFICATE FILES:"
           ls -la *.p12 2>/dev/null || echo "No .p12 files found"
-          echo "=========================================="
+          echo "============================================================"
           echo "PROFILE FILES:"
           ls -la *.mobileprovision 2>/dev/null || echo "No .mobileprovision files found"
-          echo "=========================================="
+          echo "============================================================"
+          echo "CHECKING FOR EXISTING IOS FOLDER:"
+          ls -la ios/ 2>/dev/null || echo "No ios folder"
+          echo "============================================================"
 
       # ============================================================
       # STEP 3: SETUP NODE 20
@@ -49,95 +52,121 @@ jobs:
           cache: 'npm'
 
       # ============================================================
-      # STEP 4: INSTALL DEPENDENCIES (5 METHODS)
+      # STEP 4: INSTALL DEPENDENCIES (SYSTEM CHECK 1)
       # ============================================================
-      - name: Install dependencies (5 METHODS)
+      - name: Install dependencies - METHOD 1 (npm install --force)
+        id: install_1
         run: |
-          echo "=========================================="
-          echo "INSTALLING DEPENDENCIES - 5 METHODS"
-          echo "=========================================="
-          
-          echo "=== METHOD 1: npm install --force ==="
+          echo "============================================================"
+          echo "INSTALL DEPENDENCIES - METHOD 1: npm install --force"
+          echo "============================================================"
           npm install --force
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 1 SUCCESS"
+            echo "INSTALL_SUCCESS=true" >> $GITHUB_ENV
+            exit 0
           else
             echo "❌ METHOD 1 FAILED"
+            echo "INSTALL_SUCCESS=false" >> $GITHUB_ENV
           fi
-          
-          echo "=== METHOD 2: npm install --legacy-peer-deps ==="
+
+      - name: Install dependencies - METHOD 2 (npm install --legacy-peer-deps)
+        if: env.INSTALL_SUCCESS == 'false'
+        id: install_2
+        run: |
+          echo "============================================================"
+          echo "INSTALL DEPENDENCIES - METHOD 2: npm install --legacy-peer-deps"
+          echo "============================================================"
           npm install --legacy-peer-deps
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 2 SUCCESS"
+            echo "INSTALL_SUCCESS=true" >> $GITHUB_ENV
+            exit 0
           else
             echo "❌ METHOD 2 FAILED"
+            echo "INSTALL_SUCCESS=false" >> $GITHUB_ENV
           fi
-          
-          echo "=== METHOD 3: npm cache clean && npm install ==="
+
+      - name: Install dependencies - METHOD 3 (npm cache clean && npm install)
+        if: env.INSTALL_SUCCESS == 'false'
+        id: install_3
+        run: |
+          echo "============================================================"
+          echo "INSTALL DEPENDENCIES - METHOD 3: npm cache clean && npm install"
+          echo "============================================================"
           npm cache clean --force
           npm install
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 3 SUCCESS"
+            echo "INSTALL_SUCCESS=true" >> $GITHUB_ENV
+            exit 0
           else
             echo "❌ METHOD 3 FAILED"
+            echo "INSTALL_SUCCESS=false" >> $GITHUB_ENV
           fi
-          
-          echo "=== METHOD 4: npm install (clean slate) ==="
+
+      - name: Install dependencies - METHOD 4 (rm -rf node_modules && npm install)
+        if: env.INSTALL_SUCCESS == 'false'
+        id: install_4
+        run: |
+          echo "============================================================"
+          echo "INSTALL DEPENDENCIES - METHOD 4: rm -rf node_modules && npm install"
+          echo "============================================================"
           rm -rf node_modules
           npm install
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 4 SUCCESS"
+            echo "INSTALL_SUCCESS=true" >> $GITHUB_ENV
+            exit 0
           else
             echo "❌ METHOD 4 FAILED"
+            echo "INSTALL_SUCCESS=false" >> $GITHUB_ENV
           fi
-          
-          echo "=== METHOD 5: npm install with CI=1 ==="
+
+      - name: Install dependencies - METHOD 5 (CI=1 npm install)
+        if: env.INSTALL_SUCCESS == 'false'
+        id: install_5
+        run: |
+          echo "============================================================"
+          echo "INSTALL DEPENDENCIES - METHOD 5: CI=1 npm install"
+          echo "============================================================"
           CI=1 npm install
           if [ $? -eq 0 ]; then
             echo "✅ METHOD 5 SUCCESS"
+            echo "INSTALL_SUCCESS=true" >> $GITHUB_ENV
+            exit 0
           else
             echo "❌ ALL INSTALL METHODS FAILED!"
             exit 1
           fi
 
       # ============================================================
-      # STEP 5: INSTALL REACT NATIVE CLI PLATFORM IOS
-      # ============================================================
-      - name: Install react-native-cli-platform-ios
-        run: |
-          echo "=========================================="
-          echo "INSTALLING REACT-NATIVE-CLI-PLATFORM-IOS"
-          echo "=========================================="
-          npm install --save-dev @react-native-community/cli-platform-ios
-          npm install --save-dev react-native
-          npm install --save-dev expo
-
-      # ============================================================
-      # STEP 6: VERIFY NODE_MODULES
+      # STEP 5: VERIFY NODE_MODULES
       # ============================================================
       - name: Verify node_modules
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "VERIFYING NODE_MODULES"
-          echo "=========================================="
+          echo "============================================================"
           if [ -d "node_modules" ]; then
             echo "✅ node_modules exists"
             echo "Size: $(du -sh node_modules | cut -f1)"
             echo "Number of packages: $(ls node_modules | wc -l)"
-            ls node_modules | grep -E "(react-native|expo|@react-native-community)" || echo "⚠️ Some packages missing"
+            echo "React Native version: $(node -e "console.log(require('./node_modules/react-native/package.json').version)" 2>/dev/null || echo 'Not found')"
+            echo "Expo version: $(node -e "console.log(require('./node_modules/expo/package.json').version)" 2>/dev/null || echo 'Not found')"
           else
             echo "❌ node_modules missing!"
             exit 1
           fi
 
       # ============================================================
-      # STEP 7: CREATE APP.JSON (FORCE)
+      # STEP 6: CREATE APP.JSON (FORCE)
       # ============================================================
       - name: Create app.json (FORCE)
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "CREATING APP.JSON"
-          echo "=========================================="
+          echo "============================================================"
           cat > app.json << 'EOF'
           {
             "expo": {
@@ -156,19 +185,18 @@ jobs:
           cat app.json
 
       # ============================================================
-      # STEP 8: GENERATE IOS FOLDER (5 METHODS)
+      # STEP 7: GENERATE IOS FOLDER (SYSTEM CHECK 2 - 5 METHODS)
       # ============================================================
-      - name: Generate iOS folder (5 METHODS)
-        id: generate_ios
+      - name: Generate iOS folder - METHOD 1 (expo prebuild with YES)
+        id: ios_1
         run: |
-          echo "=========================================="
-          echo "GENERATING IOS FOLDER - 5 METHODS"
-          echo "=========================================="
-          
+          echo "============================================================"
+          echo "GENERATE IOS FOLDER - METHOD 1: expo prebuild with YES"
+          echo "============================================================"
           rm -rf ios
           rm -rf node_modules/.cache
-          
-          echo "=== METHOD 1: expo prebuild with YES pipe ==="
+          export CI=1
+          export EXPO_NO_INTERACTIVE=1
           echo "y" | npx expo prebuild --platform ios --clean 2>&1 | tee prebuild_log.txt
           if [ -d "ios" ]; then
             echo "✅ METHOD 1 SUCCESS"
@@ -176,9 +204,17 @@ jobs:
             exit 0
           else
             echo "❌ METHOD 1 FAILED"
+            echo "IOS_GENERATED=false" >> $GITHUB_ENV
           fi
-          
-          echo "=== METHOD 2: expo prebuild with CI=1 ==="
+
+      - name: Generate iOS folder - METHOD 2 (expo prebuild with CI=1)
+        if: env.IOS_GENERATED == 'false'
+        id: ios_2
+        run: |
+          echo "============================================================"
+          echo "GENERATE IOS FOLDER - METHOD 2: expo prebuild with CI=1"
+          echo "============================================================"
+          rm -rf ios
           CI=1 npx expo prebuild --platform ios --clean 2>&1 | tee -a prebuild_log.txt
           if [ -d "ios" ]; then
             echo "✅ METHOD 2 SUCCESS"
@@ -186,9 +222,17 @@ jobs:
             exit 0
           else
             echo "❌ METHOD 2 FAILED"
+            echo "IOS_GENERATED=false" >> $GITHUB_ENV
           fi
-          
-          echo "=== METHOD 3: react-native init (BYPASS) ==="
+
+      - name: Generate iOS folder - METHOD 3 (react-native init)
+        if: env.IOS_GENERATED == 'false'
+        id: ios_3
+        run: |
+          echo "============================================================"
+          echo "GENERATE IOS FOLDER - METHOD 3: react-native init"
+          echo "============================================================"
+          rm -rf ios
           npx react-native init temp_ios --version 0.74.0 --skip-install
           if [ -d "temp_ios/ios" ]; then
             cp -R temp_ios/ios .
@@ -199,14 +243,24 @@ jobs:
             exit 0
           else
             echo "❌ METHOD 3 FAILED"
+            echo "IOS_GENERATED=false" >> $GITHUB_ENV
           fi
-          
-          echo "=== METHOD 4: Manual iOS folder creation ==="
+
+      - name: Generate iOS folder - METHOD 4 (Manual creation)
+        if: env.IOS_GENERATED == 'false'
+        id: ios_4
+        run: |
+          echo "============================================================"
+          echo "GENERATE IOS FOLDER - METHOD 4: Manual creation"
+          echo "============================================================"
           mkdir -p ios
+          mkdir -p ios/gymapp2
+          mkdir -p ios/gymapp2/Images.xcassets/AppIcon.appiconset
+          mkdir -p ios/gymapp2/Base.lproj
+          
           cat > ios/Podfile << 'EOF'
           platform :ios, '13.0'
           target 'gymapp2' do
-            use_frameworks! :linkage => :static
             pod 'React'
             pod 'React-Core'
             pod 'React-RCTActionSheet'
@@ -228,40 +282,7 @@ jobs:
             pod 'FBLazyVector'
             pod 'RCTRequired'
             pod 'RCTTypeSafety'
-            pod 'React-RCTFabric'
-            pod 'React-Fabric'
-            pod 'React-FabricComponents'
-            pod 'React-FabricImage'
-            pod 'React-ImageManager'
-            pod 'React-Mapbuffer'
-            pod 'React-RCTAppDelegate'
-            pod 'React-CoreModules'
-            pod 'React-RuntimeApple'
-            pod 'React-RuntimeCore'
-            pod 'React-RuntimeHermes'
-            pod 'React-hermes'
-            pod 'React-graphics'
-            pod 'React-debug'
-            pod 'React-featureflags'
-            pod 'React-utils'
-            pod 'React-callinvoker'
-            pod 'React-runtimescheduler'
-            pod 'React-rendererdebug'
-            pod 'React-logger'
-            pod 'React-perflogger'
-            pod 'React-runtimeexecutor'
-            pod 'React-NativeModulesApple'
             pod 'ExpoModulesCore'
-            
-            post_install do |installer|
-              installer.pods_project.targets.each do |target|
-                target.build_configurations.each do |config|
-                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
-                  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
-                  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
-                end
-              end
-            end
           end
           EOF
           
@@ -271,10 +292,18 @@ jobs:
             exit 0
           else
             echo "❌ METHOD 4 FAILED"
+            echo "IOS_GENERATED=false" >> $GITHUB_ENV
           fi
-          
-          echo "=== METHOD 5: Expo run:ios ==="
-          npx expo run:ios --no-build-cache --no-install --no-dev
+
+      - name: Generate iOS folder - METHOD 5 (Expo run:ios)
+        if: env.IOS_GENERATED == 'false'
+        id: ios_5
+        run: |
+          echo "============================================================"
+          echo "GENERATE IOS FOLDER - METHOD 5: Expo run:ios"
+          echo "============================================================"
+          rm -rf ios
+          npx expo run:ios --no-build-cache --no-install --no-dev 2>&1 | tee -a prebuild_log.txt
           if [ -d "ios" ]; then
             echo "✅ METHOD 5 SUCCESS"
             echo "IOS_GENERATED=true" >> $GITHUB_ENV
@@ -285,13 +314,14 @@ jobs:
           fi
 
       # ============================================================
-      # STEP 9: FIX PODFILE (SIMPLIFIED - NO BACKTICKS)
+      # STEP 8: PODFILE STRATEGY 1 - REACT NATIVE ONLY (SIMPLEST)
       # ============================================================
-      - name: Fix Podfile (SIMPLIFIED)
+      - name: Podfile Strategy 1 - React Native Only
+        id: podfile_1
         run: |
-          echo "=========================================="
-          echo "FIXING PODFILE - SIMPLIFIED VERSION"
-          echo "=========================================="
+          echo "============================================================"
+          echo "PODFILE STRATEGY 1: React Native Only (Simplest)"
+          echo "============================================================"
           cd ios || exit 1
           
           cat > Podfile << 'EOF'
@@ -302,13 +332,27 @@ jobs:
           target 'gymapp2' do
             pod 'React', :path => '../node_modules/react-native'
             pod 'React-Core', :path => '../node_modules/react-native/React'
+            pod 'React-RCTActionSheet', :path => '../node_modules/react-native/Libraries/ActionSheetIOS'
+            pod 'React-RCTAnimation', :path => '../node_modules/react-native/Libraries/NativeAnimation'
+            pod 'React-RCTBlob', :path => '../node_modules/react-native/Libraries/Blob'
             pod 'React-RCTImage', :path => '../node_modules/react-native/Libraries/Image'
+            pod 'React-RCTLinking', :path => '../node_modules/react-native/Libraries/LinkingIOS'
             pod 'React-RCTNetwork', :path => '../node_modules/react-native/Libraries/Network'
+            pod 'React-RCTSettings', :path => '../node_modules/react-native/Libraries/Settings'
+            pod 'React-RCTText', :path => '../node_modules/react-native/Libraries/Text'
             pod 'React-RCTVibration', :path => '../node_modules/react-native/Libraries/Vibration'
             pod 'React-RCTWebSocket', :path => '../node_modules/react-native/Libraries/WebSocket'
+            pod 'React-callinvoker', :path => '../node_modules/react-native/ReactCommon/callinvoker'
             pod 'React-cxxreact', :path => '../node_modules/react-native/ReactCommon/cxxreact'
             pod 'React-jsi', :path => '../node_modules/react-native/ReactCommon/jsi'
-            pod 'ExpoModulesCore', :path => '../node_modules/expo-modules-core'
+            pod 'React-jsiexecutor', :path => '../node_modules/react-native/ReactCommon/jsiexecutor'
+            pod 'React-jsinspector', :path => '../node_modules/react-native/ReactCommon/jsinspector'
+            pod 'ReactCommon', :path => '../node_modules/react-native/ReactCommon'
+            pod 'React-runtimeexecutor', :path => '../node_modules/react-native/ReactCommon/runtimeexecutor'
+            pod 'Yoga', :path => '../node_modules/react-native/ReactCommon/yoga'
+            pod 'FBLazyVector', :path => '../node_modules/react-native/Libraries/FBLazyVector'
+            pod 'RCTRequired', :path => '../node_modules/react-native/Libraries/RCTRequired'
+            pod 'RCTTypeSafety', :path => '../node_modules/react-native/Libraries/TypeSafety'
             
             post_install do |installer|
               installer.pods_project.targets.each do |target|
@@ -322,70 +366,251 @@ jobs:
           end
           EOF
           
-          echo "✅ Simplified Podfile created"
+          echo "✅ Podfile Strategy 1 created"
           cat Podfile
           cd ..
 
       # ============================================================
-      # STEP 10: INSTALL PODS (4 METHODS)
+      # STEP 9: PODFILE STRATEGY 2 - WITH EXPO MODULES
       # ============================================================
-      - name: Install Pods (4 METHODS)
+      - name: Podfile Strategy 2 - With Expo Modules
+        id: podfile_2
+        if: steps.podfile_1.outcome != 'success'
         run: |
-          echo "=========================================="
-          echo "INSTALLING PODS - 4 METHODS"
-          echo "=========================================="
-          
-          sudo gem install cocoapods
+          echo "============================================================"
+          echo "PODFILE STRATEGY 2: With Expo Modules"
+          echo "============================================================"
           cd ios || exit 1
           
-          echo "=== PODS METHOD 1: pod install ==="
-          pod install
-          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            echo "✅ METHOD 1 SUCCESS"
-            exit 0
-          else
-            echo "❌ METHOD 1 FAILED"
-          fi
+          cat > Podfile << 'EOF'
+          platform :ios, '13.0'
           
-          echo "=== PODS METHOD 2: pod install --repo-update ==="
-          pod install --repo-update
-          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            echo "✅ METHOD 2 SUCCESS"
-            exit 0
-          else
-            echo "❌ METHOD 2 FAILED"
-          fi
+          $RCT_NEW_ARCH_ENABLED = 0
           
-          echo "=== PODS METHOD 3: pod install --verbose ==="
-          pod install --verbose
-          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            echo "✅ METHOD 3 SUCCESS"
-            exit 0
-          else
-            echo "❌ METHOD 3 FAILED"
-          fi
+          target 'gymapp2' do
+            # React Native core
+            pod 'React', :path => '../node_modules/react-native'
+            pod 'React-Core', :path => '../node_modules/react-native/React'
+            pod 'React-RCTActionSheet', :path => '../node_modules/react-native/Libraries/ActionSheetIOS'
+            pod 'React-RCTAnimation', :path => '../node_modules/react-native/Libraries/NativeAnimation'
+            pod 'React-RCTBlob', :path => '../node_modules/react-native/Libraries/Blob'
+            pod 'React-RCTImage', :path => '../node_modules/react-native/Libraries/Image'
+            pod 'React-RCTLinking', :path => '../node_modules/react-native/Libraries/LinkingIOS'
+            pod 'React-RCTNetwork', :path => '../node_modules/react-native/Libraries/Network'
+            pod 'React-RCTSettings', :path => '../node_modules/react-native/Libraries/Settings'
+            pod 'React-RCTText', :path => '../node_modules/react-native/Libraries/Text'
+            pod 'React-RCTVibration', :path => '../node_modules/react-native/Libraries/Vibration'
+            pod 'React-RCTWebSocket', :path => '../node_modules/react-native/Libraries/WebSocket'
+            pod 'React-callinvoker', :path => '../node_modules/react-native/ReactCommon/callinvoker'
+            pod 'React-cxxreact', :path => '../node_modules/react-native/ReactCommon/cxxreact'
+            pod 'React-jsi', :path => '../node_modules/react-native/ReactCommon/jsi'
+            pod 'React-jsiexecutor', :path => '../node_modules/react-native/ReactCommon/jsiexecutor'
+            pod 'React-jsinspector', :path => '../node_modules/react-native/ReactCommon/jsinspector'
+            pod 'ReactCommon', :path => '../node_modules/react-native/ReactCommon'
+            pod 'React-runtimeexecutor', :path => '../node_modules/react-native/ReactCommon/runtimeexecutor'
+            pod 'Yoga', :path => '../node_modules/react-native/ReactCommon/yoga'
+            pod 'FBLazyVector', :path => '../node_modules/react-native/Libraries/FBLazyVector'
+            pod 'RCTRequired', :path => '../node_modules/react-native/Libraries/RCTRequired'
+            pod 'RCTTypeSafety', :path => '../node_modules/react-native/Libraries/TypeSafety'
+            
+            # Expo Modules
+            pod 'ExpoModulesCore', :path => '../node_modules/expo-modules-core'
+            pod 'Expo', :path => '../node_modules/expo'
+            
+            post_install do |installer|
+              installer.pods_project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+                  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                end
+              end
+            end
+          end
+          EOF
           
-          echo "=== PODS METHOD 4: pod install --no-repo-update ==="
-          pod install --no-repo-update
-          if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
-            echo "✅ METHOD 4 SUCCESS"
-            exit 0
-          else
-            echo "❌ ALL POD METHODS FAILED!"
-            exit 1
-          fi
-          
+          echo "✅ Podfile Strategy 2 created"
+          cat Podfile
           cd ..
 
       # ============================================================
-      # STEP 11: FIND WORKSPACE
+      # STEP 10: PODFILE STRATEGY 3 - SIMPLE WITH AUTOLINKING
+      # ============================================================
+      - name: Podfile Strategy 3 - Simple with Autolinking
+        id: podfile_3
+        if: steps.podfile_2.outcome != 'success'
+        run: |
+          echo "============================================================"
+          echo "PODFILE STRATEGY 3: Simple with Autolinking"
+          echo "============================================================"
+          cd ios || exit 1
+          
+          cat > Podfile << 'EOF'
+          require File.join(File.dirname(`node --print "require.resolve('expo/package.json')"`), "scripts/autolinking")
+          require File.join(File.dirname(`node --print "require.resolve('react-native/package.json')"`), "scripts/react_native_pods")
+          
+          platform :ios, '13.0'
+          install! 'cocoapods', :deterministic_uuids => false
+          
+          $RCT_NEW_ARCH_ENABLED = 0
+          
+          target 'gymapp2' do
+            use_expo_modules!
+            config = use_native_modules!
+            
+            use_react_native!(
+              :path => config[:reactNativePath],
+              :hermes_enabled => true,
+              :fabric_enabled => false
+            )
+            
+            post_install do |installer|
+              react_native_post_install(installer)
+            end
+          end
+          EOF
+          
+          echo "✅ Podfile Strategy 3 created"
+          cat Podfile
+          cd ..
+
+      # ============================================================
+      # STEP 11: INSTALL PODS - STRATEGY 1 (4 METHODS)
+      # ============================================================
+      - name: Install Pods - Strategy 1 (React Native Only)
+        id: pods_1
+        run: |
+          echo "============================================================"
+          echo "INSTALL PODS - STRATEGY 1: React Native Only"
+          echo "============================================================"
+          sudo gem install cocoapods
+          cd ios || exit 1
+          
+          for i in 1 2 3 4; do
+            echo "=== ATTEMPT $i ==="
+            case $i in
+              1) pod install ;;
+              2) pod install --repo-update ;;
+              3) pod install --verbose ;;
+              4) pod cache clean --all && pod install ;;
+            esac
+            
+            if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+              echo "✅ PODS INSTALLED SUCCESSFULLY"
+              echo "PODS_SUCCESS=true" >> $GITHUB_ENV
+              exit 0
+            fi
+            echo "❌ ATTEMPT $i FAILED"
+            sleep 3
+          done
+          echo "PODS_SUCCESS=false" >> $GITHUB_ENV
+          cd ..
+
+      # ============================================================
+      # STEP 12: INSTALL PODS - STRATEGY 2 (With Expo)
+      # ============================================================
+      - name: Install Pods - Strategy 2 (With Expo)
+        id: pods_2
+        if: env.PODS_SUCCESS == 'false'
+        run: |
+          echo "============================================================"
+          echo "INSTALL PODS - STRATEGY 2: With Expo Modules"
+          echo "============================================================"
+          cd ios || exit 1
+          
+          # Create Podfile with Expo
+          cat > Podfile << 'EOF'
+          platform :ios, '13.0'
+          
+          $RCT_NEW_ARCH_ENABLED = 0
+          
+          target 'gymapp2' do
+            pod 'React', :path => '../node_modules/react-native'
+            pod 'React-Core', :path => '../node_modules/react-native/React'
+            pod 'React-RCTImage', :path => '../node_modules/react-native/Libraries/Image'
+            pod 'React-RCTNetwork', :path => '../node_modules/react-native/Libraries/Network'
+            pod 'React-cxxreact', :path => '../node_modules/react-native/ReactCommon/cxxreact'
+            pod 'React-jsi', :path => '../node_modules/react-native/ReactCommon/jsi'
+            pod 'ExpoModulesCore', :path => '../node_modules/expo-modules-core'
+            pod 'Expo', :path => '../node_modules/expo'
+            pod 'Yoga', :path => '../node_modules/react-native/ReactCommon/yoga'
+            
+            post_install do |installer|
+              installer.pods_project.targets.each do |target|
+                target.build_configurations.each do |config|
+                  config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '13.0'
+                  config.build_settings['CODE_SIGNING_ALLOWED'] = 'NO'
+                  config.build_settings['CODE_SIGNING_REQUIRED'] = 'NO'
+                end
+              end
+            end
+          end
+          EOF
+          
+          for i in 1 2 3 4; do
+            echo "=== ATTEMPT $i ==="
+            case $i in
+              1) pod install ;;
+              2) pod install --repo-update ;;
+              3) pod install --verbose ;;
+              4) pod cache clean --all && pod install ;;
+            esac
+            
+            if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+              echo "✅ PODS INSTALLED SUCCESSFULLY"
+              echo "PODS_SUCCESS=true" >> $GITHUB_ENV
+              exit 0
+            fi
+            echo "❌ ATTEMPT $i FAILED"
+            sleep 3
+          done
+          echo "PODS_SUCCESS=false" >> $GITHUB_ENV
+          cd ..
+
+      # ============================================================
+      # STEP 13: INSTALL PODS - STRATEGY 3 (Minimal)
+      # ============================================================
+      - name: Install Pods - Strategy 3 (Minimal)
+        id: pods_3
+        if: env.PODS_SUCCESS == 'false'
+        run: |
+          echo "============================================================"
+          echo "INSTALL PODS - STRATEGY 3: Minimal"
+          echo "============================================================"
+          cd ios || exit 1
+          
+          cat > Podfile << 'EOF'
+          platform :ios, '13.0'
+          target 'gymapp2' do
+            pod 'React'
+            pod 'React-Core'
+            pod 'Yoga'
+          end
+          EOF
+          
+          for i in 1 2 3; do
+            echo "=== ATTEMPT $i ==="
+            pod install --repo-update
+            if [ -f "Pods/Pods.xcodeproj/project.pbxproj" ]; then
+              echo "✅ PODS INSTALLED SUCCESSFULLY"
+              echo "PODS_SUCCESS=true" >> $GITHUB_ENV
+              exit 0
+            fi
+            echo "❌ ATTEMPT $i FAILED"
+            sleep 3
+          done
+          echo "PODS_SUCCESS=false" >> $GITHUB_ENV
+          cd ..
+
+      # ============================================================
+      # STEP 14: FIND WORKSPACE
       # ============================================================
       - name: Find workspace
         id: find_workspace
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "FINDING WORKSPACE"
-          echo "=========================================="
+          echo "============================================================"
           cd ios || exit 1
           
           WORKSPACE=$(find . -maxdepth 1 -name "*.xcworkspace" -type d | head -1)
@@ -414,20 +639,18 @@ jobs:
           cd ..
 
       # ============================================================
-      # STEP 12: BUILD APP (3 METHODS)
+      # STEP 15: BUILD APP (3 METHODS)
       # ============================================================
-      - name: Build iOS app (3 METHODS)
+      - name: Build iOS app - METHOD 1 (Standard)
+        id: build_1
         run: |
-          echo "=========================================="
-          echo "BUILDING IOS APP - 3 METHODS"
-          echo "=========================================="
-          
+          echo "============================================================"
+          echo "BUILD IOS APP - METHOD 1: Standard"
+          echo "============================================================"
           cd ios || exit 1
-          
           rm -rf build
           export RCT_NEW_ARCH_ENABLED=0
           
-          echo "=== BUILD METHOD 1: Standard ==="
           if [ "$BUILD_TYPE" = "workspace" ]; then
             xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO RCT_NEW_ARCH_ENABLED=0
           else
@@ -436,12 +659,24 @@ jobs:
           
           if [ -d "build" ] && [ -n "$(find build -name "*.app" -type d 2>/dev/null)" ]; then
             echo "✅ BUILD METHOD 1 SUCCESS"
+            echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
             exit 0
           else
             echo "❌ BUILD METHOD 1 FAILED"
+            echo "BUILD_SUCCESS=false" >> $GITHUB_ENV
           fi
+          cd ..
+
+      - name: Build iOS app - METHOD 2 (Clean)
+        id: build_2
+        if: env.BUILD_SUCCESS == 'false'
+        run: |
+          echo "============================================================"
+          echo "BUILD IOS APP - METHOD 2: Clean"
+          echo "============================================================"
+          cd ios || exit 1
+          export RCT_NEW_ARCH_ENABLED=0
           
-          echo "=== BUILD METHOD 2: Clean ==="
           xcodebuild clean
           if [ "$BUILD_TYPE" = "workspace" ]; then
             xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO RCT_NEW_ARCH_ENABLED=0
@@ -451,12 +686,24 @@ jobs:
           
           if [ -d "build" ] && [ -n "$(find build -name "*.app" -type d 2>/dev/null)" ]; then
             echo "✅ BUILD METHOD 2 SUCCESS"
+            echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
             exit 0
           else
             echo "❌ BUILD METHOD 2 FAILED"
+            echo "BUILD_SUCCESS=false" >> $GITHUB_ENV
           fi
+          cd ..
+
+      - name: Build iOS app - METHOD 3 (Additional flags)
+        id: build_3
+        if: env.BUILD_SUCCESS == 'false'
+        run: |
+          echo "============================================================"
+          echo "BUILD IOS APP - METHOD 3: Additional flags"
+          echo "============================================================"
+          cd ios || exit 1
+          export RCT_NEW_ARCH_ENABLED=0
           
-          echo "=== BUILD METHOD 3: Additional flags ==="
           if [ "$BUILD_TYPE" = "workspace" ]; then
             xcodebuild -workspace "$FOUND_WORKSPACE" -scheme "$FOUND_SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO ONLY_ACTIVE_ARCH=NO RCT_NEW_ARCH_ENABLED=0
           else
@@ -465,23 +712,23 @@ jobs:
           
           if [ -d "build" ] && [ -n "$(find build -name "*.app" -type d 2>/dev/null)" ]; then
             echo "✅ BUILD METHOD 3 SUCCESS"
+            echo "BUILD_SUCCESS=true" >> $GITHUB_ENV
             exit 0
           else
             echo "❌ ALL BUILD METHODS FAILED!"
             exit 1
           fi
-          
           cd ..
 
       # ============================================================
-      # STEP 13: FIND APP (4 LOCATIONS)
+      # STEP 16: FIND APP (4 LOCATIONS)
       # ============================================================
       - name: Find app
         id: find_app
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "FINDING APP - 4 LOCATIONS"
-          echo "=========================================="
+          echo "============================================================"
           
           APP_PATH=$(find ios/build -name "*.app" -type d 2>/dev/null | head -1)
           [ -n "$APP_PATH" ] && echo "Found in ios/build: $APP_PATH"
@@ -503,7 +750,6 @@ jobs:
           
           if [ -z "$APP_PATH" ]; then
             echo "❌ No app found anywhere!"
-            echo "=== SEARCH RESULTS ==="
             find . -name "*.app" -type d
             exit 1
           fi
@@ -512,13 +758,13 @@ jobs:
           echo "APP_PATH=$APP_PATH" >> $GITHUB_ENV
 
       # ============================================================
-      # STEP 14: VERIFY APP
+      # STEP 17: VERIFY APP
       # ============================================================
       - name: Verify app
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "VERIFYING APP"
-          echo "=========================================="
+          echo "============================================================"
           
           APP_SIZE=$(du -sh "$APP_PATH" | cut -f1)
           echo "App size: $APP_SIZE"
@@ -533,13 +779,13 @@ jobs:
           echo "✅ App verified"
 
       # ============================================================
-      # STEP 15: CREATE UNSIGNED IPA
+      # STEP 18: CREATE UNSIGNED IPA
       # ============================================================
       - name: Create unsigned IPA
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "CREATING UNSIGNED IPA"
-          echo "=========================================="
+          echo "============================================================"
           
           rm -rf Payload
           mkdir -p Payload
@@ -556,47 +802,41 @@ jobs:
           
           if [ "$IPA_SIZE" -lt 1000000 ]; then
             echo "❌ IPA is too small ($IPA_SIZE bytes)! Build failed."
-            echo "=== PAYLOAD CONTENTS ==="
-            ls -la Payload/
             exit 1
           fi
           
           echo "✅ Unsigned IPA created successfully!"
 
       # ============================================================
-      # STEP 16: DOWNLOAD ZSIGN
+      # STEP 19: DOWNLOAD ZSIGN
       # ============================================================
       - name: Download zsign
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "DOWNLOADING ZSIGN"
-          echo "=========================================="
-          
+          echo "============================================================"
           curl -L -o zsign https://github.com/zhlynn/zsign/releases/latest/download/zsign-macos
           chmod +x zsign
-          
           if [ -f "zsign" ]; then
-            echo "✅ zsign downloaded successfully!"
-            ls -la zsign
+            echo "✅ zsign downloaded"
           else
-            echo "❌ zsign download failed!"
+            echo "❌ zsign download failed"
             exit 1
           fi
 
       # ============================================================
-      # STEP 17: FIND CERTIFICATE AND PROFILE
+      # STEP 20: FIND CERTIFICATE AND PROFILE
       # ============================================================
       - name: Find certificate and profile
         id: find_cert
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "FINDING CERTIFICATE AND PROFILE"
-          echo "=========================================="
+          echo "============================================================"
           
           CERT_FILE=$(ls *.p12 2>/dev/null | head -1)
           if [ -z "$CERT_FILE" ]; then
             echo "❌ No .p12 certificate found!"
-            echo "Available files:"
             ls -la
             exit 1
           fi
@@ -606,7 +846,6 @@ jobs:
           PROFILE_FILE=$(ls *.mobileprovision 2>/dev/null | head -1)
           if [ -z "$PROFILE_FILE" ]; then
             echo "❌ No .mobileprovision file found!"
-            echo "Available files:"
             ls -la
             exit 1
           fi
@@ -614,16 +853,16 @@ jobs:
           echo "PROFILE_FILE=$PROFILE_FILE" >> $GITHUB_ENV
 
       # ============================================================
-      # STEP 18: SIGN THE IPA (3 METHODS)
+      # STEP 21: SIGN THE IPA (3 METHODS)
       # ============================================================
       - name: Sign IPA (3 METHODS)
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "SIGNING IPA - 3 METHODS"
-          echo "=========================================="
+          echo "============================================================"
           echo "Certificate: ${{ env.CERT_FILE }}"
           echo "Profile: ${{ env.PROFILE_FILE }}"
-          echo "=========================================="
+          echo "============================================================"
           
           PASSWORD="Uhjiply-7643"
           
@@ -659,26 +898,25 @@ jobs:
           fi
 
       # ============================================================
-      # STEP 19: VERIFY SIGNED IPA
+      # STEP 22: VERIFY SIGNED IPA
       # ============================================================
       - name: Verify signed IPA
         run: |
-          echo "=========================================="
+          echo "============================================================"
           echo "VERIFYING SIGNED IPA"
-          echo "=========================================="
+          echo "============================================================"
           
           if [ -f "gymapp2-signed.ipa" ] && [ -s "gymapp2-signed.ipa" ]; then
             SIZE=$(stat -f%z "gymapp2-signed.ipa" 2>/dev/null || stat -c%s "gymapp2-signed.ipa" 2>/dev/null)
             echo "✅ Signed IPA is valid!"
             echo "Size: $SIZE bytes"
-            echo "✅ Signed IPA is ready to install!"
           else
             echo "❌ Signed IPA is missing or empty!"
             exit 1
           fi
 
       # ============================================================
-      # STEP 20: UPLOAD UNSIGNED IPA
+      # STEP 23: UPLOAD UNSIGNED IPA
       # ============================================================
       - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
@@ -689,7 +927,7 @@ jobs:
           retention-days: 30
 
       # ============================================================
-      # STEP 21: UPLOAD SIGNED IPA
+      # STEP 24: UPLOAD SIGNED IPA
       # ============================================================
       - name: Upload signed IPA
         uses: actions/upload-artifact@v4
@@ -700,7 +938,7 @@ jobs:
           retention-days: 30
 
       # ============================================================
-      # STEP 22: UPLOAD BUILD LOGS
+      # STEP 25: UPLOAD BUILD LOGS
       # ============================================================
       - name: Upload build logs
         if: always()
@@ -717,7 +955,7 @@ jobs:
           retention-days: 7
 
       # ============================================================
-      # STEP 23: SUCCESS MESSAGE
+      # STEP 26: SUCCESS MESSAGE
       # ============================================================
       - name: Build and sign complete!
         if: success()
@@ -741,7 +979,7 @@ jobs:
           echo "============================================================"
 
       # ============================================================
-      # STEP 24: DEBUG ON FAILURE
+      # STEP 27: DEBUG ON FAILURE
       # ============================================================
       - name: Debug on failure
         if: failure()
