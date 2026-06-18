@@ -1,91 +1,141 @@
-name: Build iOS IPA (React Native)
+name: Build iOS IPA (Foolproof)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: macos-latest
+    
     steps:
-      - uses: actions/checkout@v4
+      # Step 1: Checkout WITHOUT submodules to avoid the error
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
-          submodules: recursive
-          fetch-depth: 0
+          submodules: false
+          fetch-depth: 1
 
+      # Step 2: Debug - show what we have
+      - name: List files
+        run: |
+          echo "=== Root directory ==="
+          ls -la
+          echo "=== iOS directory ==="
+          ls -la ios/ || echo "No ios folder"
+          echo "=== Package.json ==="
+          cat package.json | head -20 || echo "No package.json"
+
+      # Step 3: Setup Node.js
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
           cache: 'npm'
 
-      - name: Install Dependencies
+      # Step 4: Install dependencies
+      - name: Install dependencies
         run: |
-          npm ci || npm install
-          # Install React Native CLI if missing
-          if ! grep -q "@react-native-community/cli" package.json; then
-            npm install --save-dev @react-native-community/cli
-          fi
+          npm ci --legacy-peer-deps || npm install --legacy-peer-deps
+          # Ensure React Native CLI is installed
+          npm install --save-dev @react-native-community/cli
 
+      # Step 5: Bundle JavaScript
       - name: Bundle JavaScript
         run: |
-          # Try local CLI first
-          if [ -f "node_modules/.bin/react-native" ]; then
-            node_modules/.bin/react-native bundle --entry-file index.js --bundle-output ios/main.jsbundle --platform ios --dev false
+          # Try multiple entry points
+          if [ -f "index.js" ]; then
+            ENTRY_FILE="index.js"
+          elif [ -f "index.android.js" ]; then
+            ENTRY_FILE="index.android.js"
           else
-            npx @react-native-community/cli bundle --entry-file index.js --bundle-output ios/main.jsbundle --platform ios --dev false
+            ENTRY_FILE="index.js"
           fi
+          
+          echo "Using entry file: $ENTRY_FILE"
+          
+          # Use npx with the local CLI
+          npx react-native bundle --entry-file $ENTRY_FILE --bundle-output ios/main.jsbundle --platform ios --dev false
 
+      # Step 6: Install iOS Pods
       - name: Install iOS Pods
         run: |
           cd ios
+          # Remove Podfile.lock to avoid conflicts
+          rm -f Podfile.lock
+          # Install pods
           pod install --repo-update || pod install
           cd ..
 
-      - name: Build iOS App
+      # Step 7: Build iOS app
+      - name: Build iOS app
         run: |
           cd ios
-          # Auto-detect workspace or project
+          
+          # Find workspace or project file
           WORKSPACE=$(ls *.xcworkspace 2>/dev/null | head -1)
           PROJECT=$(ls *.xcodeproj 2>/dev/null | head -1)
           
           if [ -n "$WORKSPACE" ]; then
             SCHEME="${WORKSPACE%.xcworkspace}"
             echo "Building workspace: $WORKSPACE with scheme: $SCHEME"
-            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO
+            xcodebuild -workspace "$WORKSPACE" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           elif [ -n "$PROJECT" ]; then
             SCHEME="${PROJECT%.xcodeproj}"
             echo "Building project: $PROJECT with scheme: $SCHEME"
-            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO
+            xcodebuild -project "$PROJECT" -scheme "$SCHEME" -configuration Release -derivedDataPath build -sdk iphoneos CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO
           else
             echo "No iOS project found!"
             ls -la
             exit 1
           fi
+          
           cd ..
 
-      - name: Locate and Package App
+      # Step 8: Find and package the .app
+      - name: Package IPA
         run: |
-          # Find the built .app
+          # Find the built app
           APP_PATH=$(find ios/build -name "*.app" -type d | head -1)
+          
           if [ -z "$APP_PATH" ]; then
-            echo "No .app bundle found in ios/build!"
-            find ios -name "*.app" -type d
+            echo "Searching for .app in all directories..."
+            APP_PATH=$(find . -name "*.app" -type d | grep -v "Pods" | head -1)
+          fi
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "No .app bundle found!"
+            find . -name "*.app" -type d
             exit 1
           fi
-          echo "App found at: $APP_PATH"
           
+          echo "Found app at: $APP_PATH"
+          
+          # Create Payload folder and copy app
           mkdir -p Payload
           cp -R "$APP_PATH" Payload/
           
           # Create IPA
-          zip -r YourApp.ipa Payload/
+          zip -r gymapp2.ipa Payload/
+          echo "IPA created successfully!"
 
-      - name: Upload Artifact
+      # Step 9: Upload the IPA
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: YourApp-IPA
-          path: YourApp.ipa
+          name: gymapp2-ipa
+          path: gymapp2.ipa
           compression-level: 9
           retention-days: 7
+
+      # Step 10: Upload debug info if build fails
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            ios/build/Logs/
+            ios/build/**/*.log
+            ios/Pods/
